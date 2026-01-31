@@ -569,9 +569,13 @@ mainView.classList.add('hidden');
 profileBtn.classList.add('hidden');
 transition.classList.add('hidden');
 
+// Robust remember-me handling: persist both the preference flag and username
 const remembered = localStorage.getItem('launcherUser');
+const rememberFlag = localStorage.getItem('rememberMe') === 'true';
 if (remembered) {
     username.value = remembered;
+}
+if (rememberFlag) {
     rememberMe.checked = true;
 }
 
@@ -579,8 +583,10 @@ if (remembered) {
 try {
     rememberMe?.addEventListener('change', () => {
         try {
-            if (rememberMe.checked && username.value.trim()) localStorage.setItem('launcherUser', username.value.trim());
-            else localStorage.removeItem('launcherUser');
+            const enabled = !!rememberMe.checked;
+            localStorage.setItem('rememberMe', enabled ? 'true' : 'false');
+            if (enabled && username.value.trim()) localStorage.setItem('launcherUser', username.value.trim());
+            if (!enabled) localStorage.removeItem('launcherUser');
         } catch (e) { }
     });
     username?.addEventListener('input', () => {

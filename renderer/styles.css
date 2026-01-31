@@ -328,6 +328,12 @@ header.in-main #appTitle.slide-in {
     border-width: 1px;
 }
 
+/* Remember-me hint */
+#rememberHint {
+    font-size: 13px;
+    color: #9aa4b2;
+}
+
 .checkbox.small input[type="checkbox"]:checked::after {
     font-size: 9px;
     top: 48%;
