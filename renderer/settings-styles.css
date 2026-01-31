@@ -13,6 +13,24 @@
     backdrop-filter: blur(10px);
 }
 
+/* Center-aligned single-row settings (e.g., update checkbox) */
+.settings-section.settings-row {
+    display: flex;
+    align-items: center;
+    padding-top: 12px;
+    padding-bottom: 12px;
+}
+
+.settings-section.settings-row .checkbox {
+    margin: 0;
+    gap: 10px;
+    width: 100%;
+}
+
+.settings-section.settings-row .checkbox span {
+    color: #9aa4b2;
+}
+
 .settings-header {
     font-size: 14px;
     font-weight: 700;

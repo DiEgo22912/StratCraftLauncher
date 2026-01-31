@@ -317,7 +317,8 @@ header.in-main #appTitle.slide-in {
     gap: 8px;
     font-size: 13px;
     align-items: center;
-    padding: 6px 8px;
+    padding: 0;
+    margin-left: 0;
 }
 
 .checkbox.small input[type="checkbox"] {
