@@ -1,0 +1,62 @@
+name: Build and publish launcher artifacts
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Tag of the release to build for (optional, uses event release tag if run from release)' 
+        required: false
+
+jobs:
+  build-and-upload:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Windows NSIS installer
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run dist:win
+
+      - name: Find artifacts
+        id: find
+        shell: powershell
+        run: |
+          $installer = Get-ChildItem -Path ./dist -Filter "StratCraftLauncher-setup-*.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $installer) { Write-Error "Installer not found in dist/"; exit 1 }
+          Write-Host "Installer: $($installer.FullName)"
+          echo "installer_path=$($installer.FullName)" >> $env:GITHUB_ENV
+          $latest = Join-Path -Path $installer.DirectoryName -ChildPath 'latest.yml'
+          if (-not (Test-Path $latest)) { Write-Warning "latest.yml not found next to installer; electron-builder should generate it." }
+          echo "latest_path=$latest" >> $env:GITHUB_ENV
+
+      - name: Upload installer to release
+        uses: actions/upload-release-asset@v1
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ${{ env.installer_path }}
+          asset_name: ${{ env.installer_path }}
+          asset_content_type: application/octet-stream
+
+      - name: Upload latest.yml to release (if present)
+        if: ${{ env.latest_path != '' }}
+        uses: actions/upload-release-asset@v1
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ${{ env.latest_path }}
+          asset_name: latest.yml
+          asset_content_type: text/plain
+
+      - name: Done
+        run: echo "Artifacts uploaded to release"
