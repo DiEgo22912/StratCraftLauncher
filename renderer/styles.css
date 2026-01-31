@@ -316,16 +316,32 @@ header.in-main #appTitle.slide-in {
 .checkbox.small {
     gap: 8px;
     font-size: 13px;
+    align-items: center;
+    padding: 6px 8px;
 }
 
 .checkbox.small input[type="checkbox"] {
-    width: 14px;
-    height: 14px;
+    width: 12px;
+    height: 12px;
     border-radius: 3px;
+    border-width: 1px;
 }
 
 .checkbox.small input[type="checkbox"]:checked::after {
-    font-size: 10px;
+    font-size: 9px;
+    top: 48%;
+}
+
+/* Hide status/ETA placeholders when empty to avoid stray dashes */
+.update-status:empty,
+.update-eta:empty {
+    display: none;
+}
+
+.update-status {
+    color: #9aa4b2;
+    min-width: 120px;
+    /* reserve space to reduce layout shift when status appears */
 }
 
 input {
