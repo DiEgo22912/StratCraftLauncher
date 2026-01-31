@@ -335,7 +335,18 @@ input[type="range"] {
     display: flex;
     gap: 10px;
     margin-top: 16px;
-    margin-bottom: 18px; /* add spacing below buttons to separate from next section */
+    margin-bottom: 36px;
+    /* increased spacing below buttons to separate from next section */
+}
+
+/* Add extra top spacing for settings sections to avoid visual crowding */
+.settings-panel>.settings-section {
+    margin-top: 12px;
+}
+
+.settings-panel .settings-section label {
+    justify-content: flex-start;
+    /* keep checkbox + label aligned left */
 }
 
 .btn {
