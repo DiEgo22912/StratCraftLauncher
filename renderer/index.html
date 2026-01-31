@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>StratCraft Launcher</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="settings-styles.css" />
+</head>
+
+<body>
+    <div class="animated-bg"></div>
+    <div class="container">
+        <header id="mainHeader">
+            <h1 id="appTitle">StratCraft Server</h1>
+            <div class="subtitle">Локальная авторизация</div>
+        </header>
+
+        <div id="authView" class="card">
+            <div class="card-logo">
+                <div class="logo-icon">🎮</div>
+                <div class="logo-glow"></div>
+            </div>
+            <h2>Вход в лаунчер</h2>
+            <div class="card-description">Добро пожаловать в StratCraft</div>
+            <div class="row">
+                <input id="username" placeholder="Ник" />
+            </div>
+            <div class="row">
+                <input id="password" type="password" placeholder="Пароль" />
+            </div>
+            <label class="checkbox">
+                <input id="rememberMe" type="checkbox" />
+                <span>Запомнить меня</span>
+            </label>
+            <div class="buttons">
+                <button id="loginBtn" class="btn green">Войти</button>
+                <button id="registerBtn" class="btn">Создать аккаунт</button>
+            </div>
+            <div id="status" class="status"></div>
+
+            <div class="server-preview">
+                <div class="preview-title">📡 Статус сервера</div>
+                <div class="preview-info">
+                    <span id="authServerDot" class="server-dot"></span>
+                    <span id="authServerState">—</span>
+                    <span id="authServerPlayers" class="preview-players">—</span>
+                </div>
+            </div>
+
+            <div class="launcher-version">Launcher v1.0.0</div>
+        </div>
+
+        <div id="mainView" class="main-view hidden">
+            <div class="launcher-shell">
+                <div class="topbar">
+                    <div class="brand">
+                        <div class="brand-icon">CS</div>
+                        <div class="brand-text">StratCraft Server</div>
+                    </div>
+                    <nav class="nav">
+                        <button class="nav-item active">Главная</button>
+                        <button id="settingsBtn" class="nav-item">
+                            <span class="nav-icon" id="settingsAnim"></span>
+                            Настройки
+                        </button>
+                    </nav>
+                </div>
+
+                <div class="hero">
+                    <div class="hero-content">
+                        <div class="hero-title">Добро пожаловать в StratCraft</div>
+                        <div class="hero-subtitle">Локальный лаунчер с быстрым запуском сборки.</div>
+                    </div>
+                    <div class="hero-badge">NEO</div>
+                </div>
+
+                <div class="playbar">
+                    <div class="play-info">
+                        <div class="play-title">StratCraft 1.24.1</div>
+                        <div id="mainStatus" class="status">Готово к запуску.</div>
+                        <div class="server-status">
+                            <span id="serverDot" class="server-dot"></span>
+                            <span id="serverState">Оффлайн</span>
+                            <span id="serverPlayers" class="server-players">0/0</span>
+                        </div>
+                    </div>
+                    <div class="play-actions">
+                        <button id="downloadBtn" class="btn ghost">Проверить файлы</button>
+                        <button id="launchBtn" class="btn play">Зайти на сервер</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="profileBtn" class="profile-avatar hidden">
+        <div class="avatar-icon">👤</div>
+        <div class="avatar-status"></div>
+    </div>
+
+    <div id="profileDrawer" class="drawer hidden">
+        <div class="drawer-content">
+            <div class="drawer-title">Профиль</div>
+            <div id="profileName" class="drawer-name">—</div>
+            <button id="logoutBtn" class="btn red">Выход из аккаунта</button>
+        </div>
+    </div>
+
+    <div id="registerModal" class="modal hidden">
+        <div class="modal-content">
+            <h2>Регистрация</h2>
+            <div class="row">
+                <input id="regUsername" placeholder="Ник" />
+            </div>
+            <div class="row">
+                <input id="regPassword" type="password" placeholder="Пароль" />
+            </div>
+            <div class="row">
+                <input id="regPassword2" type="password" placeholder="Повтор пароля" />
+            </div>
+            <div class="buttons">
+                <button id="registerConfirmBtn" class="btn green">Создать</button>
+                <button id="registerCancelBtn" class="btn">Отмена</button>
+            </div>
+            <div id="registerStatus" class="status"></div>
+        </div>
+    </div>
+
+    <div id="settingsModal" class="modal hidden">
+        <div class="modal-content settings-panel">
+            <h2>⚙️ Настройки лаунчера</h2>
+
+            <div class="settings-section">
+                <div class="settings-header">💾 Оперативная память</div>
+                <div class="ram-controls">
+                    <div class="ram-display">
+                        <span class="ram-label">Выделено:</span>
+                        <input id="ramInput" type="number" min="2" step="1" class="ram-input" />
+                        <span class="ram-unit">GB</span>
+                    </div>
+                    <div class="row">
+                        <input id="maxRam" type="range" min="2" step="1" class="ram-slider" />
+                    </div>
+                    <div class="ram-info">
+                        <span>Доступно: <span id="systemRam">16</span> GB</span>
+                        <span class="ram-recommendation">Рекомендуется: 4-8 GB</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="settings-section">
+                <div class="settings-header">📁 Директория игры</div>
+                <div class="directory-selector">
+                    <input id="gameDirectory" type="text" readonly class="directory-input"
+                        placeholder="Выберите папку..." />
+                    <button id="browseDirectoryBtn" class="btn ghost">Обзор</button>
+                </div>
+                <div class="directory-hint">Папка с файлами игры и модами</div>
+            </div>
+
+            <div class="buttons">
+                <button id="saveSettingsBtn" class="btn green">Сохранить</button>
+                <button id="cancelSettingsBtn" class="btn">Отмена</button>
+            </div>
+
+            <div class="settings-section">
+                <label style="display:flex;align-items:center;gap:8px;">
+                    <input type="checkbox" id="autoCheckUpdates" />
+                    <span>Автоматически проверять обновления</span>
+                </label>
+            </div>
+
+            <div class="update-controls" style="margin-top:12px; display:flex; gap:10px; align-items:center;">
+                <button id="checkUpdatesBtn" class="btn ghost">Проверить обновления</button>
+                <span id="updateStatus" class="update-status">—</span>
+                <progress id="updateProgress" value="0" max="100" style="width:160px; display:none"></progress>
+            </div>
+        </div>
+    </div>
+
+    <div id="downloadModal" class="modal hidden">
+        <div class="modal-content download-modal">
+            <div class="download-icon">
+                <img src="data:image/gif;base64,R0lGODlhZABkAPcAAAAAAAAAMwAAZgAAmQAAzAAA/wArAAArMwArZgArmQArzAAr/wBVAABVMwBVZgBVmQBVzABV/wCAAACAMwCAZgCAmQCAzACA/wCqAACqMwCqZgCqmQCqzACq/wDVAADVMwDVZgDVmQDVzADV/wD/AAD/MwD/ZgD/mQD/zAD//zMAADMAMzMAZjMAmTMAzDMA/zMrADMrMzMrZjMrmTMrzDMr/zNVADNVMzNVZjNVmTNVzDNV/zOAADOAMzOAZjOAmTOAzDOA/zOqADOqMzOqZjOqmTOqzDOq/zPVADPVMzPVZjPVmTPVzDPV/zP/ADP/MzP/ZjP/mTP/zDP//2YAAGYAM2YAZmYAmWYAzGYA/2YrAGYrM2YrZmYrmWYrzGYr/2ZVAGZVM2ZVZmZVmWZVzGZV/2aAAGaAM2aAZmaAmWaAzGaA/2aqAGaqM2aqZmaqmWaqzGaq/2bVAGbVM2bVZmbVmWbVzGbV/2b/AGb/M2b/Zmb/mWb/zGb//5kAAJkAM5kAZpkAmZkAzJkA/5krAJkrM5krZpkrmZkrzJkr/5lVAJlVM5lVZplVmZlVzJlV/5mAAJmAM5mAZpmAmZmAzJmA/5mqAJmqM5mqZpmqmZmqzJmq/5nVAJnVM5nVZpnVmZnVzJnV/5n/AJn/M5n/Zpn/mZn/zJn//8wAAMwAM8wAZswAmcwAzMwA/8wrAMwrM8wrZswrmcwrzMwr/8xVAMxVM8xVZsxVmcxVzMxV/8yAAMyAM8yAZsyAmcyAzMyA/8yqAMyqM8yqZsyqmcyqzMyq/8zVAMzVM8zVZszVmczVzMzV/8z/AMz/M8z/Zsz/mcz/zMz///8AAP8AM/8AZv8Amf8AzP8A//8rAP8rM/8rZv8rmf8rzP8r//9VAP9VM/9VZv9Vmf9VzP9V//+AAP+AM/+AZv+Amf+AzP+A//+qAP+qM/+qZv+qmf+qzP+q///VAP/VM//VZv/Vmf/VzP/V////AP//M///Zv//mf//zP///wAAAAAAAAAAAAAAACH/C05FVFNDQVBFMi4wAwEAAAAh+QQJCgD/ACwAAAAAZABkAAAI/wD/CRxIsKDBgwgTKlzIsKHDhxAjSpxIsaLFixgzatzIsaPHjyBDihxJsqTJkyhTqlzJsqXLlzBjypxJs6bNmzhz6tzJs6fPn0CDCh1KtKjRo0iTKl3KtKnTp1CjSp1KtarVq1izat3KtavXr2DDih1LtqzZs2jTql3Ltq3bt3Djyp1Lt67du3jz6t3Lt6/fv4ADCx5MuLDhw4gTK17MuLHjx5AjS55MubLly5gza97MubPnz6BDix5NurTp06hTq17NurXr17Bjy55Nu7bt27hz697Nu7fv38CDCx9OvLjx48iTK1/OvLnz59CjS59Ovbr169iza9/Ovbv37+DDix9Pvrz58+jTq1/Pvr379/Djy59Pv779+/jz69/Pv7///wAGKOCABBZo4IEIJqjgggw26OCDEEYo4YQUVmjhhRhmqOGGHHbo4YcghijiiCSWaOKJKKao4oostujiizDGKOOMNNZo44045qjjjjz26OOPQAYp5JBEFmnkkUgmqeSSTDbp5JNQRinllFRWaeWVWGap5ZZcdunll2CGKeaYZJZp5plopqnmmmy26eabcMYp55x01mnnnXjmqeeefPbp55+ABirooIQWauihiCaq6KKMNuroo5BGKumklFZq6aWYZqrpppx26umnoIYq6qiklmrqqaimquqqrLbq6quwxirrrLTWauutuOaq66689urrr8AGK+ywxBZr7LHIJqvsssw26+yz0EYr7bTUVmvttdhmq+223Hbr7bfghivuuOSWa+656Kar7rrstuvuu/DGK++89NZr77345qvvvvz26++/AAcs8MAEF2zwwQgnrPDCDDfs8MMQRyzxxBRXbPHFGGes8cYcd+zxxyCHLPLIJJds8skop6zyyiy37PLLMMcs88w012zzzTjnrPPOPPfs889ABy300EQXbfTRSCet9NJMN+3001BHLfXUVFdt9dVYZ6311lx37fXXYIct9thkl2322WinrfbabLft9ttwxy333HTXbffdeOet99589+3334AHLvjghBdu+OGIJ6744ow37vjjkEcu+eSUV2755ZhnrvnmnHfu+eeghy766KSXbvrpqKeu+uqst+7667DHLvvstNdu++2456777rz37vvvwAcv/PDEF2/88cgnr/zyzDfv/PPQRy/99NRXb/312Gev/fbcd+/99+CHL/745Jdv/vnop6/++uy37/778Mcv//z012///fjnr///AAygAAdIwAIa8IAITMB8CkhABSqwgQ6U4PYamEAJStCCF8TgBTe4wQ7KD4MjNKH6PkjCD56whCY8IQpTqMIVsrCFLnwhDGMowxnScIY2vCEOc6jDHfKwhz78IRCDKMQhErGIRjwiEpOoxCUysYlOfCIUo0jFKlrxiljMoha3yMUuevGLYAyjGMdIxjKa8YxoTKMa18jGNrrxjXCMoxznSMc62vGOeMyjHvfIxz768Y+ADKQgB0nIQhrykIhMpCIXychGOvKRkIykJCdJyUpa8pKYzKQmN8nJTnryk6AMpShHScpSmvKUqEylKlfJyla68pWwjKUsZ0nLWtrylrjMpS53ycte+vKXwAymMIdJzGIa85jITKYyl8nMZjrzmQAAIfkECQoA/wAsAAAAAGQAZAAACP8A/wkcSLCgwYMIEypcyLChw4cQI0qcSLGixYsYM2rcyLGjx48gQ4ocSbKkyZMoU6pcybKly5cwY8qcSbOmzZs4c+rcybOnz59AgwodSrSo0aNIkypdyrSp06dQo0qdSrWq1atYs2rdyrWr169gw4odS7as2bNo06pdy7at27dw48qdS7eu3bt48+rdy7ev37+AAwseTLiw4cOIEytezLix48eQI0ueTLmy5cuYM2vezLmz58+gQ4seTbq06dOoU6tezbq169ewY8ueTbu27du4c+vezbu379/AgwsfTry48ePIkytfzry58+fQo0ufTr269evYs2vfzr279+/gw4sfT768+fPo06tfz769+/fw48ufT7++/fv48+vfz7+///8ABijggAQWaOCBCCao4IIMNujggxBGKOGEFFZo4YUYZqjhhhx26OGHIIYo4ogklmjiiSimqOKKLLbo4oswxijjjDTWaOONOOao44489ujjj0AGKeSQRBZp5JFIJqnkkkw26eSTUEYp5ZRUVmnllVhmqeWWXHbp5ZdghpkgRGKaKSaZZ6bZZpQGhFnnnXiqyeefgAYq6KCEFmrooYgmquiijDbq6KOQRirppJRWaumlmGaq6aacdurpp6CGKuqopJZq6qmopqrqqqy26uqrsGYkAKuxiMrq6q7GJqssqMqO+oKyrlRrrKyLFjvtitVyq22f2pZbbRkDdAsmtN3OK2u3/9s+u2y7cLoqbrp63tkvpfZeey+8+PLp7r7L5sswBgVD+2e+EGNwMMF1GgzxmwlXHGfDHaupscVvJizyp/0SGmXHJfdJMMl9RhznmnJWzKW+L5+kZ8wt+cnyvj/znOnP+n4acL79Cqo0u0IvmvLRKUdNtbJJ64r0sAhbbXXWXn8d9cxgj3ry1m+r3HLZOasNsr4u7zq0zn8Lvfe6Pxsccq5NI9403oRTy2nLkjPOc+V5Y/1jxx5zW+7Yopudt+jBxqv4tg+Tzm6rpNtN+sCt7z266alznPmbpx9ru+7g3k68vOl27e7yuzb/PS3m0IZf/vi0jlurxOb7Xe76urfPt+Df1q77uAyYv2/8P94Ofva/6P86fv7IZy8xAQQAgM1UD5QB0VgbsLUCRXcNdhcOSM1VAgxE0HXXXnfwQNYKUMC01mCnLYHYWC0AtdRi010B2FdjNUEFb7ct991Z9a2VBhXc7Xff5xLOVQQU2O343+AC7tUBE+A9+N+EE8bVAg/0Lf8ABh9k1AEO0G3//YobVMABcsf//ysgPr8K0EDe+g8gIf0eIAHegwdcYDn+C0BCQAH+P4AGjEw/Awggbv4lMB//JSAA98F/CJRGPwc8cLf/L6BEQAMoIHz+O2A9QQvsXW/+TWA1vQ4gQd32/9+AMQIaAN70J+CGfw8sne//F9hLQQM44Lf+ZSBAwRQoAu77d0GDHPQCA8wd/zR4oIIqUAC/828FDWLQBR7gvv1VsEAIfWAE7/u/AWJIYAT9+9+BElIQBxrYP/5d8CAIaQAB+fP/CEhQhCYgQP3+b0EGReAAv9c/ClpI4vgG+H8BTihC/P8QkICBHVpB/wQ8SEIZWkD+/kehCU2IAO77P0EQqlAH8G9/FFYohRKQnwAQvCiEFSDg/yY4khF5YAL++18FFVQhD+jH/xxciEIceGD//s/BiUA0gQO+77+IGmSBCuyP/zTakIUosL//EQChCkFgAgPon4IFUfj/AvjtfwxaaEIQOED//jejBknwAfv3v49EdKEHBKD//jO6EAQWeF//g/ShCQ5Qf/5nP6QKNcAA/+u/+j01gAABxK//73/UEl2gAAFMAP3+z39JD3pgAAAgwP75T+lCAyBAAf/vvwFRKkAA/vd/AAEBADs="
+                    alt="👍" class="download-gif">
+            </div>
+            <h3>Скачивание пока не подключено</h3>
+            <p>Эта функция будет доступна в следующих обновлениях лаунчера.</p>
+            <button id="downloadOkBtn" class="btn green">Ок</button>
+        </div>
+    </div>
+
+    <div id="transition" class="transition hidden">
+        <div class="transition-title">StratCraft Server</div>
+    </div>
+
+    <script src="../node_modules/lottie-web/build/player/lottie.min.js"></script>
+    <script src="renderer.js"></script>
+</body>
+
+</html>

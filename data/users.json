@@ -1,0 +1,47 @@
+[
+  {
+    "username": "DiEgo2291",
+    "salt": "f4a9b6deba1d9b0e8dbf751e795fcaa6",
+    "hash": "908f10b87a1a83ca5630c384b867dbdac74e26a5504b909eb088a7e76e7cfdca",
+    "iterations": 120000,
+    "keylen": 32,
+    "digest": "sha256",
+    "createdAt": "2026-01-24T11:50:05.685Z"
+  },
+  {
+    "username": "test",
+    "salt": "6d437d01a4e99d8e71ed52dfd7c73e0c",
+    "hash": "212805d494ccb171450b50378206023087db8e459958842e25bc2775c0608d20",
+    "iterations": 120000,
+    "keylen": 32,
+    "digest": "sha256",
+    "createdAt": "2026-01-24T11:56:26.834Z"
+  },
+  {
+    "username": "test123",
+    "salt": "597e9a4f27ced8956ab8e1f450cf456c",
+    "hash": "1159d9a6029ea74d6ba4290d48a2a0483ad957c2257750cc5fc30a11b2f6645e",
+    "iterations": 120000,
+    "keylen": 32,
+    "digest": "sha256",
+    "createdAt": "2026-01-24T12:14:13.817Z"
+  },
+  {
+    "username": "DiEgo22912",
+    "salt": "5b65c06ac44b470a60e7252898fb3833",
+    "hash": "cace9e603136a7b13eff237884f411f2302bbbffdefab572e54afd611d4cfe1b",
+    "iterations": 120000,
+    "keylen": 32,
+    "digest": "sha256",
+    "createdAt": "2026-01-24T13:12:01.567Z"
+  },
+  {
+    "username": "test123123",
+    "salt": "e48f77be727cc7b90cc0f2b571672537",
+    "hash": "a764806c7406b9fe2d8582009cd69257ce2a79a7f56acd8be4711c05a471ad8a",
+    "iterations": 120000,
+    "keylen": 32,
+    "digest": "sha256",
+    "createdAt": "2026-01-24T15:13:46.835Z"
+  }
+]
