@@ -20,6 +20,14 @@ contextBridge.exposeInMainWorld('client', {
     launch: (opts) => ipcRenderer.invoke('client:launch', opts)
 });
 
+contextBridge.exposeInMainWorld('clientUpdate', {
+    check: () => ipcRenderer.invoke('client:update:check'),
+    download: (url) => ipcRenderer.invoke('client:update:download', { url }),
+    install: (zipPath, version) => ipcRenderer.invoke('client:update:install', { zipPath, version }),
+    onProgress: (cb) => ipcRenderer.on('client:update:progress', (e, d) => cb(d)),
+    onEvent: (cb) => ipcRenderer.on('client:update:event', (e, d) => cb(d))
+});
+
 contextBridge.exposeInMainWorld('updates', {
     check: () => ipcRenderer.invoke('update:check'),
     download: () => ipcRenderer.invoke('update:download'),

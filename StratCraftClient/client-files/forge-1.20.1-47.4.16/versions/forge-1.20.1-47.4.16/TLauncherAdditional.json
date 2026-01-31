@@ -1,0 +1,106 @@
+{
+  "activateSkinCapeForUserVersion": false,
+  "skipHashsumValidation": false,
+  "additionalFiles": [
+    {
+      "sha1": "de86b035d2da0f78940796bb95c39a932ed84834",
+      "size": 12592249,
+      "path": "libraries/net/minecraft/client/1.20.1-20230612.114412/client-1.20.1-20230612.114412-slim.jar",
+      "url": "http://res.tlauncher.org/unb/libraries/cache/net/minecraft/client/1.20.1-20230612.114412/client-1.20.1-20230612.114412-slim.jar"
+    },
+    {
+      "sha1": "6c48521eed01fe2e8ecdadbd5ae348415f3c47da",
+      "size": 8001795,
+      "path": "libraries/net/minecraft/client/1.20.1-20230612.114412/client-1.20.1-20230612.114412-mappings.txt",
+      "url": "http://res.tlauncher.org/unb/libraries/cache/net/minecraft/client/1.20.1-20230612.114412/client-1.20.1-20230612.114412-mappings.txt"
+    },
+    {
+      "sha1": "3c8aa19b710a3a68f721210eb69b74594d13e218",
+      "size": 18842082,
+      "path": "libraries/net/minecraft/client/1.20.1-20230612.114412/client-1.20.1-20230612.114412-srg.jar",
+      "url": "http://res.tlauncher.org/unb/libraries/cache/net/minecraft/client/1.20.1-20230612.114412/client-1.20.1-20230612.114412-srg.jar"
+    },
+    {
+      "sha1": "8c5a95cbce940cfdb304376ae9fea47968d02587",
+      "size": 10436626,
+      "path": "libraries/net/minecraft/client/1.20.1-20230612.114412/client-1.20.1-20230612.114412-extra.jar",
+      "url": "http://res.tlauncher.org/unb/libraries/cache/net/minecraft/client/1.20.1-20230612.114412/client-1.20.1-20230612.114412-extra.jar"
+    },
+    {
+      "sha1": "a7b5ece2802dbf1969b4e4cb1c9926f25544a1f6",
+      "size": 2507137,
+      "path": "libraries/net/minecraftforge/forge/1.20.1-47.4.16/forge-1.20.1-47.4.16-universal.jar",
+      "url": "http://res.tlauncher.org/unb/libraries/cache/net/minecraftforge/forge/1.20.1-47.4.16/forge-1.20.1-47.4.16-universal.jar"
+    },
+    {
+      "sha1": "d8e1d9169ab0f6f3ff0ad41eccb3496f202d5484",
+      "size": 4848917,
+      "path": "libraries/net/minecraftforge/forge/1.20.1-47.4.16/forge-1.20.1-47.4.16-client.jar",
+      "url": "http://res.tlauncher.org/unb/libraries/cache/net/minecraftforge/forge/1.20.1-47.4.16/forge-1.20.1-47.4.16-client.jar"
+    },
+    {
+      "sha1": "2dd456356718e73c81a72bb33fd713863b5c6beb",
+      "size": 118907,
+      "path": "libraries/net/minecraftforge/fmlcore/1.20.1-47.4.16/fmlcore-1.20.1-47.4.16.jar",
+      "url": "http://res.tlauncher.org/unb/libraries/cache/net/minecraftforge/fmlcore/1.20.1-47.4.16/fmlcore-1.20.1-47.4.16.jar"
+    },
+    {
+      "sha1": "4de914f18f755c1d5e11d9842c52e48312928187",
+      "size": 16849,
+      "path": "libraries/net/minecraftforge/javafmllanguage/1.20.1-47.4.16/javafmllanguage-1.20.1-47.4.16.jar",
+      "url": "http://res.tlauncher.org/unb/libraries/cache/net/minecraftforge/javafmllanguage/1.20.1-47.4.16/javafmllanguage-1.20.1-47.4.16.jar"
+    },
+    {
+      "sha1": "a23beeb33d63c395afee6fc9a5dd27008ab45743",
+      "size": 4993,
+      "path": "libraries/net/minecraftforge/mclanguage/1.20.1-47.4.16/mclanguage-1.20.1-47.4.16.jar",
+      "url": "http://res.tlauncher.org/unb/libraries/cache/net/minecraftforge/mclanguage/1.20.1-47.4.16/mclanguage-1.20.1-47.4.16.jar"
+    },
+    {
+      "sha1": "8de956db8928e6196ccdf9f39fa59fedd5edbf0a",
+      "size": 7393,
+      "path": "libraries/net/minecraftforge/lowcodelanguage/1.20.1-47.4.16/lowcodelanguage-1.20.1-47.4.16.jar",
+      "url": "http://res.tlauncher.org/unb/libraries/cache/net/minecraftforge/lowcodelanguage/1.20.1-47.4.16/lowcodelanguage-1.20.1-47.4.16.jar"
+    }
+  ],
+  "tlauncherVersion": 0,
+  "modpack": {
+    "modpackMemory": true,
+    "memory": 16602,
+    "id": -67993946184800,
+    "name": "forge-1.20.1-47.4.16",
+    "favorite": false,
+    "version": {
+      "mods": [],
+      "resourcePacks": [],
+      "maps": [],
+      "shaderpacks": [],
+      "gameVersionDTO": {
+        "id": 46,
+        "name": "1.20.1"
+      },
+      "minecraftVersionName": {
+        "id": 4249,
+        "name": "47.4.16"
+      },
+      "id": -67993946322700,
+      "name": "1.0",
+      "available": false,
+      "remove": false,
+      "minecraftVersionTypes": [
+        {
+          "id": 1,
+          "name": "forge"
+        }
+      ]
+    },
+    "userInstall": false,
+    "populateStatus": false,
+    "available": false,
+    "parser": false,
+    "totalComments": 0
+  },
+  "source": "local_version_repo",
+  "jar": "1.20.1",
+  "skinVersion": false
+}

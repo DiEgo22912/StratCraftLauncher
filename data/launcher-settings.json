@@ -1,4 +1,6 @@
 {
   "minRamGb": 2,
-  "maxRamGb": 6
+  "maxRamGb": 6,
+  "gameDir": null,
+  "autoCheckUpdates": true
 }

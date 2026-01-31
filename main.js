@@ -371,6 +371,134 @@ app.whenReady().then(() => {
         }
     });
 
+    // Client update helpers: fetch manifest from GitHub Releases, download, verify and install
+    const GITHUB_CLIENT_OWNER = 'DiEgo22912';
+    const GITHUB_CLIENT_REPO = 'StratCraftClient';
+    const GITHUB_CLIENT_API = `https://api.github.com/repos/${GITHUB_CLIENT_OWNER}/${GITHUB_CLIENT_REPO}`;
+
+    function fetchJson(url) {
+        return new Promise((resolve, reject) => {
+            const https = require('https');
+            const opts = new URL(url);
+            opts.headers = { 'User-Agent': 'StratCraftLauncher', 'Accept': 'application/vnd.github+json' };
+            https.get(opts, (res) => {
+                let buf = '';
+                res.setEncoding('utf8');
+                res.on('data', d => buf += d);
+                res.on('end', () => {
+                    if (res.statusCode >= 200 && res.statusCode < 300) {
+                        try { resolve(JSON.parse(buf)); } catch (e) { reject(e); }
+                    } else {
+                        reject(new Error(`HTTP ${res.statusCode} for ${url}`));
+                    }
+                });
+            }).on('error', reject);
+        });
+    }
+
+    async function fetchLatestClientManifest() {
+        const rel = await fetchJson(`${GITHUB_CLIENT_API}/releases/latest`);
+        const manifestAsset = (rel?.assets || []).find(a => a.name === 'client-manifest.json');
+        if (!manifestAsset) throw new Error('client-manifest.json asset not found in latest release');
+        const manifest = await fetchJson(manifestAsset.browser_download_url);
+        return { manifest, release: rel };
+    }
+
+    function downloadFile(url, destPath, onProgress) {
+        return new Promise((resolve, reject) => {
+            const https = require('https');
+            const fs = require('fs');
+            const req = https.get(url, { headers: { 'User-Agent': 'StratCraftLauncher' } }, (res) => {
+                if (res.statusCode && res.statusCode >= 400) return reject(new Error(`HTTP ${res.statusCode}`));
+                const total = parseInt(res.headers['content-length'] || '0', 10);
+                let transferred = 0;
+                const out = fs.createWriteStream(destPath);
+                let lastTime = Date.now();
+                let lastTransferred = 0;
+                res.on('data', (chunk) => {
+                    transferred += chunk.length;
+                    out.write(chunk);
+                    const now = Date.now();
+                    if (now - lastTime >= 500) {
+                        const bytesPerSec = Math.max(1, Math.floor((transferred - lastTransferred) / ((now - lastTime) / 1000)));
+                        lastTime = now; lastTransferred = transferred;
+                        try { mainWindow?.webContents?.send('client:update:progress', { transferred, total, bytesPerSecond: bytesPerSec, percent: total ? Math.round(transferred / total * 100) : 0 }); } catch (e) { }
+                        if (typeof onProgress === 'function') onProgress({ transferred, total });
+                    }
+                });
+                res.on('end', () => { out.end(); resolve(); });
+                res.on('error', (err) => { out.close(); reject(err); });
+            });
+            req.on('error', reject);
+        });
+    }
+
+    function computeSha512(filePath) {
+        return new Promise((resolve, reject) => {
+            const fs = require('fs');
+            const crypto = require('crypto');
+            const h = crypto.createHash('sha512');
+            const s = fs.createReadStream(filePath);
+            s.on('data', d => h.update(d));
+            s.on('end', () => resolve(h.digest('base64')));
+            s.on('error', reject);
+        });
+    }
+
+    async function extractZip(zipPath, destDir) {
+        if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
+        if (process.platform === 'win32') {
+            const ps = spawnSync('powershell', ['-NoProfile', '-Command', `Expand-Archive -Path "${zipPath}" -DestinationPath "${destDir}" -Force`], { stdio: 'inherit' });
+            if (ps.status !== 0) throw new Error('Expand-Archive failed');
+        } else {
+            const z = spawnSync('unzip', ['-o', zipPath, '-d', destDir], { stdio: 'inherit' });
+            if (z.status !== 0) throw new Error('unzip failed');
+        }
+    }
+
+    ipcMain.handle('client:update:check', async () => {
+        try {
+            const { manifest, release } = await fetchLatestClientManifest();
+            return { ok: true, manifest, release };
+        } catch (err) {
+            return { ok: false, msg: err?.message || String(err) };
+        }
+    });
+
+    ipcMain.handle('client:update:download', async (_, { url }) => {
+        try {
+            const downloadsDir = path.join(DATA_DIR, 'downloads');
+            if (!fs.existsSync(downloadsDir)) fs.mkdirSync(downloadsDir, { recursive: true });
+            const fileName = path.basename(new URL(url).pathname);
+            const dest = path.join(downloadsDir, fileName);
+            await downloadFile(url, dest);
+            return { ok: true, path: dest };
+        } catch (err) {
+            return { ok: false, msg: err?.message || String(err) };
+        }
+    });
+
+    ipcMain.handle('client:update:install', async (_, { zipPath, version }) => {
+        try {
+            const clientsRoot = path.join(DATA_DIR, 'clients');
+            if (!fs.existsSync(clientsRoot)) fs.mkdirSync(clientsRoot, { recursive: true });
+            const tmp = path.join(clientsRoot, `${version}.tmp`);
+            const final = path.join(clientsRoot, version);
+            if (fs.existsSync(tmp)) fs.rmSync(tmp, { recursive: true, force: true });
+            await extractZip(zipPath, tmp);
+            // atomically replace
+            if (fs.existsSync(final)) fs.rmSync(final, { recursive: true, force: true });
+            fs.renameSync(tmp, final);
+            // write metadata
+            const meta = { installed: new Date().toISOString(), version };
+            fs.writeFileSync(path.join(final, 'installed.json'), JSON.stringify(meta, null, 2), 'utf8');
+            mainWindow?.webContents?.send('client:update:event', { type: 'installed', version });
+            return { ok: true };
+        } catch (err) {
+            return { ok: false, msg: err?.message || String(err) };
+        }
+    });
+
     // Auto-check schedule: check shortly after startup and then once per day (honors saved setting)
     try {
         const startSettings = loadSettings() || {};
