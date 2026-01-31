@@ -1,0 +1,41 @@
+name: Build & Publish Client (example)
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag/version to publish (e.g. v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+
+jobs:
+  build-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build client archive and manifest
+        run: |
+          chmod +x StratCraftClient/build-client.sh
+          ./StratCraftClient/build-client.sh "client-files" "StratCraftClient/dist" "${{ github.event.inputs.tag }}"
+
+      - name: Create GitHub release and upload assets
+        uses: ncipollo/release-action@v1
+        with:
+          tag: '${{ github.event.inputs.tag }}'
+          name: 'Client ${{ github.event.inputs.tag }}'
+          files: 'StratCraftClient/dist/*'
+
+      - name: Optionally upload to CloudPub (WebDAV)
+        if: ${{ secrets.CLOUDPUB_WEBDAV_URL && secrets.CLO_API_KEY }}
+        env:
+          CLOUDPUB_WEBDAV_URL: ${{ secrets.CLOUDPUB_WEBDAV_URL }}
+          CLO_API_KEY: ${{ secrets.CLO_API_KEY }}
+        run: |
+          chmod +x StratCraftClient/upload-to-cloudpub.sh
+          ./StratCraftClient/upload-to-cloudpub.sh StratCraftClient/dist/*
+
+# NOTE: This is an example workflow. It runs manually (workflow_dispatch). It assumes
+# you have a directory `client-files/` (filled in with your Forge build artifacts)
+# in the repository, or you adapt the build steps to fetch/assemble files in CI.
