@@ -35,6 +35,7 @@ const cancelSettingsBtn = document.getElementById('cancelSettingsBtn');
 const checkUpdatesBtn = document.getElementById('checkUpdatesBtn');
 const updateStatus = document.getElementById('updateStatus');
 const updateProgress = document.getElementById('updateProgress');
+const updateEta = document.getElementById('updateEta');
 const autoCheckUpdatesCheckbox = document.getElementById('autoCheckUpdates');
 const serverDot = document.getElementById('serverDot');
 const serverState = document.getElementById('serverState');
@@ -426,6 +427,23 @@ if (checkUpdatesBtn && updateStatus) {
                         if (updateProgress) {
                             updateProgress.style.display = 'inline-block';
                             updateProgress.value = percent;
+                        }
+                        // Compute ETA if bytesPerSecond and remaining bytes available
+                        try {
+                            const bytesPerSecond = payload?.bytesPerSecond || 0;
+                            const total = payload?.total || 0;
+                            const transferred = payload?.transferred || 0;
+                            if (bytesPerSecond > 0 && total > transferred) {
+                                const remaining = total - transferred;
+                                const etaSec = Math.max(0, Math.floor(remaining / bytesPerSecond));
+                                const mm = String(Math.floor(etaSec / 60)).padStart(2, '0');
+                                const ss = String(etaSec % 60).padStart(2, '0');
+                                if (updateEta) updateEta.textContent = `ETA ${mm}:${ss}`;
+                            } else if (updateEta) {
+                                updateEta.textContent = '—';
+                            }
+                        } catch (e) {
+                            if (updateEta) updateEta.textContent = '—';
                         }
                     }
                     break;
