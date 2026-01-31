@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld('launcher', {
 contextBridge.exposeInMainWorld('client', {
     assemble: (opts) => ipcRenderer.invoke('client:assemble', opts),
     list: () => ipcRenderer.invoke('client:list'),
+    installed: () => ipcRenderer.invoke('client:installed'),
     launch: (opts) => ipcRenderer.invoke('client:launch', opts)
 });
 

@@ -309,19 +309,107 @@ saveSettingsBtn.addEventListener('click', async () => {
     }
 });
 
-launchClientBtn?.addEventListener('click', async () => {
-    setMainStatus('Запуск клиента...', true);
-    const targetHost = localAddress || serverHost;
-    const address = serverPort ? `${targetHost}:${serverPort}` : targetHost;
-    // For launch we pass any available auth tokens (not stored in repo). If you have a token file
-    // the UI/logic can be extended to pick it. For now we use offline UUID and username.
-    const res = await window.client.launch({
-        version: '1.20.1-forge-47.4.16',
-        username: username.value.trim(),
-        serverAddress: address
-    });
-    setMainStatus(res?.msg || 'Команда запуска отправлена.', res?.ok !== false);
-});
+// Unified launch/update button behavior
+async function setLaunchButtonToLaunch() {
+    launchClientBtn.textContent = 'Запустить';
+    launchClientBtn.classList.remove('danger');
+    launchClientBtn.onclick = async () => {
+        setMainStatus('Запуск клиента...', true);
+        const targetHost = localAddress || serverHost;
+        const address = serverPort ? `${targetHost}:${serverPort}` : targetHost;
+        const res = await window.client.launch({
+            version: '1.20.1-forge-47.4.16',
+            username: username.value.trim(),
+            serverAddress: address
+        });
+        setMainStatus(res?.msg || 'Команда запуска отправлена.', res?.ok !== false);
+    };
+}
+
+async function setLaunchButtonToUpdate(manifest) {
+    launchClientBtn.textContent = 'Обновить';
+    launchClientBtn.classList.add('danger');
+    launchClientBtn.onclick = async () => {
+        const statusEl = document.getElementById('clientUpdateStatus');
+        try {
+            statusEl.textContent = 'Загрузка обновления...';
+            const d = await window.clientUpdate.download(manifest.archive.url);
+            if (d?.ok) {
+                statusEl.textContent = 'Установка...';
+                const baseName = manifest.version || `client-${Date.now()}`;
+                const inst = await window.clientUpdate.install(d.path, baseName);
+                if (inst?.ok) {
+                    statusEl.textContent = 'Обновление установлено.';
+                    setMainStatus('Клиент обновлён.', true);
+                    setLaunchButtonToLaunch();
+                } else {
+                    statusEl.textContent = `Ошибка установки: ${inst?.msg || 'неизвестно'}`;
+                }
+            } else {
+                statusEl.textContent = `Ошибка загрузки: ${d?.msg || 'неизвестно'}`;
+            }
+        } catch (e) {
+            statusEl.textContent = `Ошибка: ${e?.message || e}`;
+        }
+    };
+}
+
+// Automatic client check after login
+async function checkClientUpdateAndApplyUI() {
+    const statusEl = document.getElementById('clientUpdateStatus');
+    statusEl.textContent = '';
+    try {
+        const r = await window.client.installed();
+        const installed = (r?.ok !== false) ? r.clients : [];
+        const res = await window.clientUpdate.check();
+        if (res?.ok && res.manifest) {
+            const manifest = res.manifest;
+            // determine if installed version matches manifest.version
+            const installedNames = installed.map(x => x.meta?.version || x.name);
+            if (!installedNames.includes(manifest.version)) {
+                // update available
+                setLaunchButtonToUpdate(manifest);
+                document.getElementById('clientRemoteVersion').textContent = manifest.version || '—';
+                return;
+            }
+        }
+        // no update
+        setLaunchButtonToLaunch();
+        document.getElementById('clientRemoteVersion').textContent = '—';
+    } catch (e) {
+        statusEl.textContent = `Ошибка проверки: ${e?.message || e}`;
+        setLaunchButtonToLaunch();
+    }
+}
+
+// call check on login transition
+function playTransition(userName) {
+    transition.classList.remove('hidden');
+    setTimeout(() => {
+        transition.classList.add('hidden');
+        authView.classList.add('hidden');
+        mainView.classList.remove('hidden');
+        profileBtn.classList.remove('hidden');
+        profileName.textContent = userName || '—';
+        header.classList.add('in-main');
+        if (!mainView.contains(header)) {
+            mainView.insertBefore(header, mainView.firstChild);
+        }
+        appTitle.classList.remove('slide-in');
+        if (mainActions) {
+            mainActions.classList.remove('show');
+        }
+        requestAnimationFrame(() => {
+            appTitle.classList.add('slide-in');
+            if (mainActions) {
+                setTimeout(() => mainActions.classList.add('show'), 400);
+            }
+        });
+        loadSettings();
+        startServerPolling();
+        checkClientUpdateAndApplyUI();
+    }, 1200);
+}
 
 launchBtn.addEventListener('click', async () => {
     setMainStatus('Запуск игры...', true);

@@ -499,6 +499,27 @@ app.whenReady().then(() => {
         }
     });
 
+    // Return installed clients from DATA_DIR/clients (installed.json)
+    ipcMain.handle('client:installed', async () => {
+        try {
+            const clientsRoot = path.join(DATA_DIR, 'clients');
+            if (!fs.existsSync(clientsRoot)) return { ok: true, clients: [] };
+            const entries = fs.readdirSync(clientsRoot, { withFileTypes: true }).filter(d => d.isDirectory()).map(d => d.name);
+            const result = [];
+            for (const name of entries) {
+                const metaPath = path.join(clientsRoot, name, 'installed.json');
+                let meta = { version: name };
+                try {
+                    if (fs.existsSync(metaPath)) meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
+                } catch (e) { /* ignore */ }
+                result.push({ name, meta });
+            }
+            return { ok: true, clients: result };
+        } catch (err) {
+            return { ok: false, msg: err?.message || String(err) };
+        }
+    });
+
     // Auto-check schedule: check shortly after startup and then once per day (honors saved setting)
     try {
         const startSettings = loadSettings() || {};
