@@ -846,7 +846,15 @@ input[type="range"] {
 
 .download-modal {
     text-align: center;
-    max-width: 420px;
+    max-width: 520px;
+}
+
+.download-modal .controls {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-top: 8px;
 }
 
 .download-icon {

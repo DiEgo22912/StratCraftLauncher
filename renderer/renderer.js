@@ -460,7 +460,7 @@ if (window.clientUpdate?.onEvent) {
             if (ev?.type === 'installed') {
                 const statusEl = document.getElementById('clientUpdateStatus');
                 if (statusEl) statusEl.textContent = `Установлена версия ${ev.version}`;
-                try { const listRes = window.client.list(); listRes.then(r => { if (r?.ok) document.getElementById('clientInstalled').textContent = (r.versions||[]).join(', '); }); } catch (e) { }
+                try { const listRes = window.client.list(); listRes.then(r => { if (r?.ok) document.getElementById('clientInstalled').textContent = (r.versions || []).join(', '); }); } catch (e) { }
             }
         } catch (e) { }
     });
@@ -486,6 +486,23 @@ if (remembered) {
     username.value = remembered;
     rememberMe.checked = true;
 }
+
+// Persist "remember me" when user toggles the checkbox or changes username
+try {
+    rememberMe?.addEventListener('change', () => {
+        try {
+            if (rememberMe.checked && username.value.trim()) localStorage.setItem('launcherUser', username.value.trim());
+            else localStorage.removeItem('launcherUser');
+        } catch (e) { }
+    });
+    username?.addEventListener('input', () => {
+        try {
+            if (rememberMe.checked) {
+                if (username.value.trim()) localStorage.setItem('launcherUser', username.value.trim());
+            }
+        } catch (e) { }
+    });
+} catch (e) { }
 
 function initAnimations() {
     if (!window.lottie) return;
