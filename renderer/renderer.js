@@ -28,8 +28,7 @@ const settingsModal = document.getElementById('settingsModal');
 const maxRam = document.getElementById('maxRam');
 const ramInput = document.getElementById('ramInput');
 const systemRam = document.getElementById('systemRam');
-const gameDirectory = document.getElementById('gameDirectory');
-const browseDirectoryBtn = document.getElementById('browseDirectoryBtn');
+
 const saveSettingsBtn = document.getElementById('saveSettingsBtn');
 const cancelSettingsBtn = document.getElementById('cancelSettingsBtn');
 const checkUpdatesBtn = document.getElementById('checkUpdatesBtn');
@@ -90,9 +89,7 @@ async function loadSettings() {
     maxRam.value = String(maxVal);
     ramInput.value = String(maxVal);
 
-    if (settings?.gameDir) {
-        gameDirectory.value = settings.gameDir;
-    }
+
     if (autoCheckUpdatesCheckbox) {
         autoCheckUpdatesCheckbox.checked = settings?.autoCheckUpdates !== false;
     }
@@ -295,22 +292,14 @@ cancelSettingsBtn.addEventListener('click', () => {
     setTimeout(() => settingsModal.classList.add('hidden'), 160);
 });
 
-// Обработчик выбора директории
-browseDirectoryBtn.addEventListener('click', async () => {
-    const dir = await window.launcher.selectDirectory();
-    if (dir) {
-        gameDirectory.value = dir;
-    }
-});
+
 
 saveSettingsBtn.addEventListener('click', async () => {
     const maxVal = Number(maxRam.value);
-    const gameDir = gameDirectory.value.trim() || null;
     const autoCheck = !!(autoCheckUpdatesCheckbox && autoCheckUpdatesCheckbox.checked);
-    const res = await window.launcher.saveSettings({ maxRamGb: maxVal, gameDir, autoCheckUpdates: autoCheck });
+    const res = await window.launcher.saveSettings({ maxRamGb: maxVal, autoCheckUpdates: autoCheck });
     if (res?.ok !== false) {
         if (autoCheck) {
-            // trigger a check immediately when enabling auto-check
             if (window.updates?.check) window.updates.check();
         }
         setTimeout(() => {
