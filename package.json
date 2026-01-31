@@ -1,6 +1,6 @@
 {
     "name": "stratcraft-auth-launcher",
-    "version": "1.0.6",
+    "version": "1.0.8",
     "private": true,
     "description": "Local auth launcher UI for StratCraft",
     "main": "main.js",

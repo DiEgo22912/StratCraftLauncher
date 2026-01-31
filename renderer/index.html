@@ -49,7 +49,7 @@
                 </div>
             </div>
 
-            <div class="launcher-version">Launcher v1.0.5</div>
+            <div class="launcher-version">Launcher v1.0.8</div>
         </div>
 
         <div id="mainView" class="main-view hidden">
@@ -87,9 +87,7 @@
                         </div>
                     </div>
                     <div class="play-actions">
-                        <button id="downloadBtn" class="btn ghost">Проверить файлы</button>
-                        <button id="launchClientBtn" class="btn">Запустить клиент</button>
-                        <button id="launchBtn" class="btn play">Зайти на сервер</button>
+                        <button id="launchBtn" class="btn play">Запустить</button>
                     </div>
                 </div>
             </div>
@@ -126,6 +124,21 @@
                 <button id="registerCancelBtn" class="btn">Отмена</button>
             </div>
             <div id="registerStatus" class="status"></div>
+        </div>
+    </div>
+
+    <div id="launcherUpdateModal" class="modal hidden">
+        <div class="modal-content">
+            <h2>Вышло новое обновление!</h2>
+            <div id="launcherUpdateDetails" style="margin-top:8px; font-size:13px; color:#9aa4b2">
+                Версия: <strong id="launcherUpdateVersion">—</strong>
+            </div>
+            <div id="launcherUpdateStatus" style="margin-top:12px; color:#9aa4b2">Доступно новое обновление лаунчера.
+            </div>
+            <div class="buttons" style="margin-top:16px; display:flex; gap:8px; justify-content:flex-end;">
+                <button id="launcherInstallBtn" class="btn green">Установить обновление</button>
+                <button id="launcherCloseBtn" class="btn">Закрыть</button>
+            </div>
         </div>
     </div>
 
@@ -176,34 +189,7 @@
         </div>
     </div>
 
-    <div id="downloadModal" class="modal hidden">
-        <div class="modal-content download-modal">
-            <div style="display:flex; gap:12px; align-items:center;">
-                <div style="flex:1">
-                    <h3>Управление клиентом</h3>
-                    <div style="margin-top:8px; font-size:13px; color:#9aa4b2">
-                        <div>Установленные версии: <span id="clientInstalled">—</span></div>
-                        <div>Доступная версия: <span id="clientRemoteVersion">—</span></div>
-                    </div>
 
-                    <div class="controls" style="margin-top:12px;">
-                        <button id="clientCheckBtn" class="btn ghost">Проверить релиз</button>
-                        <button id="clientCloseBtn" class="btn">Закрыть</button>
-                    </div>
-
-                    <div style="margin-top:12px;">
-                        <progress id="clientUpdateProgress" value="0" max="100"
-                            style="width:100%; display:none"></progress>
-                        <div id="clientUpdateStatus" class="status" style="margin-top:8px"></div>
-                    </div>
-                </div>
-                <!-- Status sidebar removed, status shown below -->
-                <div style="width:120px; text-align:center; font-size:12px; color:#9aa4b2">
-                    <div style="margin-bottom:8px">—</div>
-                </div>
-            </div>
-        </div>
-    </div>
 
     <div id="transition" class="transition hidden">
         <div class="transition-title">StratCraft Server</div>

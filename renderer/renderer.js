@@ -21,9 +21,7 @@ const container = document.querySelector('.container');
 const mainStatus = document.getElementById('mainStatus');
 const launchBtn = document.getElementById('launchBtn');
 const settingsBtn = document.getElementById('settingsBtn');
-const downloadBtn = document.getElementById('downloadBtn');
-const downloadModal = document.getElementById('downloadModal');
-const downloadOkBtn = document.getElementById('downloadOkBtn');
+// download modal removed — controls handled automatically
 const settingsModal = document.getElementById('settingsModal');
 const maxRam = document.getElementById('maxRam');
 const ramInput = document.getElementById('ramInput');
@@ -37,6 +35,59 @@ const updateProgress = document.getElementById('updateProgress');
 const updateEta = document.getElementById('updateEta');
 const autoCheckUpdatesCheckbox = document.getElementById('autoCheckUpdates');
 const serverDot = document.getElementById('serverDot');
+
+// Launcher update modal elements
+const launcherUpdateModal = document.getElementById('launcherUpdateModal');
+const launcherInstallBtn = document.getElementById('launcherInstallBtn');
+const launcherCloseBtn = document.getElementById('launcherCloseBtn');
+const launcherUpdateVersion = document.getElementById('launcherUpdateVersion');
+const launcherUpdateStatusEl = document.getElementById('launcherUpdateStatus');
+
+let _launcherUpdateState = 'idle'; // idle | downloading | downloaded
+
+function showLauncherUpdateModal(version, msg) {
+    if (!launcherUpdateModal) return;
+    if (launcherUpdateVersion) launcherUpdateVersion.textContent = version || '—';
+    if (launcherUpdateStatusEl) launcherUpdateStatusEl.textContent = msg || 'Доступно новое обновление лаунчера.';
+    try { launcherUpdateModal.classList.remove('hidden'); setTimeout(() => launcherUpdateModal.classList.add('show'), 10); } catch (e) { }
+}
+
+function hideLauncherUpdateModal() {
+    if (!launcherUpdateModal) return;
+    try { launcherUpdateModal.classList.remove('show'); setTimeout(() => launcherUpdateModal.classList.add('hidden'), 160); } catch (e) { }
+}
+
+async function checkLauncherUpdateAndShowModal() {
+    if (!window.updates?.check) return;
+    try {
+        // Trigger check; 'available' event will be emitted if update exists
+        await window.updates.check();
+    } catch (e) {
+        // ignore
+    }
+}
+
+// Modal button handlers
+if (launcherInstallBtn) {
+    launcherInstallBtn.addEventListener('click', async () => {
+        try {
+            if (_launcherUpdateState === 'downloaded') {
+                try { window.updates.install(); } catch (e) { showLauncherUpdateModal(launcherUpdateVersion?.textContent, `Ошибка установки: ${e?.message || e}`); }
+                return;
+            }
+            _launcherUpdateState = 'downloading';
+            if (launcherInstallBtn) launcherInstallBtn.textContent = 'Загрузка...';
+            await window.updates.download();
+        } catch (e) {
+            _launcherUpdateState = 'idle';
+            if (launcherInstallBtn) launcherInstallBtn.textContent = 'Установить обновление';
+            showLauncherUpdateModal(launcherUpdateVersion?.textContent, `Ошибка загрузки: ${e?.message || e}`);
+        }
+    });
+}
+if (launcherCloseBtn) {
+    launcherCloseBtn.addEventListener('click', () => hideLauncherUpdateModal());
+}
 const serverState = document.getElementById('serverState');
 const serverPlayers = document.getElementById('serverPlayers');
 const authServerDot = document.getElementById('authServerDot');
@@ -316,53 +367,93 @@ saveSettingsBtn.addEventListener('click', async () => {
 
 // Unified launch/update button behavior
 async function setLaunchButtonToLaunch() {
-    launchClientBtn.textContent = 'Запустить';
-    launchClientBtn.classList.remove('danger');
-    launchClientBtn.onclick = async () => {
+    launchBtn.textContent = 'Запустить';
+    launchBtn.classList.remove('danger');
+    launchBtn.onclick = async () => {
         setMainStatus('Запуск клиента...', true);
         const targetHost = localAddress || serverHost;
         const address = serverPort ? `${targetHost}:${serverPort}` : targetHost;
-        const res = await window.client.launch({
+        const payload = {
             version: '1.20.1-forge-47.4.16',
             username: username.value.trim(),
             serverAddress: address
-        });
-        setMainStatus(res?.msg || 'Команда запуска отправлена.', res?.ok !== false);
+        };
+        const res = await window.client.launch(payload);
+        if (res?.ok !== false) {
+            setMainStatus(res?.msg || 'Команда запуска отправлена.', true);
+            return;
+        }
+        const msg = String(res?.msg || '');
+        // If assembled client not found - attempt to download release first, then assemble as fallback
+        if (msg.includes('Файлы собранного клиента не найдены')) {
+            setMainStatus('Файлы клиента не найдены — пробую скачать релиз с GitHub...', true);
+            try {
+                const chk = await window.clientUpdate.check();
+                if (chk?.ok && chk.manifest?.archive?.url) {
+                    setMainStatus('Скачиваю релиз клиента...', true);
+                    const d = await window.clientUpdate.download(chk.manifest.archive.url);
+                    if (d?.ok) {
+                        setMainStatus('Устанавливаю релиз...', true);
+                        const inst = await window.clientUpdate.install(d.path, chk.manifest.version || `client-${Date.now()}`);
+                        if (inst?.ok) {
+                            setMainStatus('Релиз установлен — пробую запустить...', true);
+                            const res2 = await window.client.launch(payload);
+                            setMainStatus(res2?.msg || 'Команда запуска отправлена.', res2?.ok !== false);
+                            return;
+                        } else {
+                            setMainStatus(`Установка релиза не удалась: ${inst?.msg || 'неизвестно'}`, false);
+                        }
+                    } else {
+                        setMainStatus(`Ошибка загрузки релиза: ${d?.msg || 'неизвестно'}`, false);
+                    }
+                } else {
+                    setMainStatus('Релиз клиента не найден в GitHub.', false);
+                }
+            } catch (e) {
+                setMainStatus(`Ошибка загрузки релиза: ${e?.message || e}`, false);
+            }
+
+            // Локальная сборка отключена — если релиз не доступен, сообщаем об ошибке
+            setMainStatus('Релиз клиента недоступен и локальная сборка отключена.', false);
+            return;
+        }
+        // Generic error
+        setMainStatus(res?.msg || 'Ошибка запуска', false);
     };
 }
 
 async function setLaunchButtonToUpdate(manifest) {
-    launchClientBtn.textContent = 'Обновить';
-    launchClientBtn.classList.add('danger');
-    launchClientBtn.onclick = async () => {
-        const statusEl = document.getElementById('clientUpdateStatus');
+    launchBtn.textContent = 'Обновить';
+    launchBtn.classList.add('danger');
+    launchBtn.onclick = async () => {
         try {
-            statusEl.textContent = 'Загрузка обновления...';
+            setMainStatus('Загрузка обновления...', true);
             const d = await window.clientUpdate.download(manifest.archive.url);
             if (d?.ok) {
-                statusEl.textContent = 'Установка...';
+                setMainStatus('Установка...', true);
                 const baseName = manifest.version || `client-${Date.now()}`;
                 const inst = await window.clientUpdate.install(d.path, baseName);
                 if (inst?.ok) {
-                    statusEl.textContent = 'Обновление установлено.';
                     setMainStatus('Клиент обновлён.', true);
+                    // hide progress bar
+                    const progressEl = document.getElementById('updateProgress');
+                    if (progressEl) progressEl.style.display = 'none';
                     setLaunchButtonToLaunch();
                 } else {
-                    statusEl.textContent = `Ошибка установки: ${inst?.msg || 'неизвестно'}`;
+                    setMainStatus(`Ошибка установки: ${inst?.msg || 'неизвестно'}`, false);
                 }
             } else {
-                statusEl.textContent = `Ошибка загрузки: ${d?.msg || 'неизвестно'}`;
+                setMainStatus(`Ошибка загрузки: ${d?.msg || 'неизвестно'}`, false);
             }
         } catch (e) {
-            statusEl.textContent = `Ошибка: ${e?.message || e}`;
+            setMainStatus(`Ошибка: ${e?.message || e}`, false);
         }
     };
 }
 
 // Automatic client check after login
 async function checkClientUpdateAndApplyUI() {
-    const statusEl = document.getElementById('clientUpdateStatus');
-    statusEl.textContent = '';
+    setMainStatus('');
     try {
         const r = await window.client.installed();
         const installed = (r?.ok !== false) ? r.clients : [];
@@ -374,15 +465,17 @@ async function checkClientUpdateAndApplyUI() {
             if (!installedNames.includes(manifest.version)) {
                 // update available
                 setLaunchButtonToUpdate(manifest);
-                document.getElementById('clientRemoteVersion').textContent = manifest.version || '—';
+                const remoteEl = document.getElementById('clientRemoteVersion');
+                if (remoteEl) remoteEl.textContent = manifest.version || '—';
                 return;
             }
         }
         // no update
         setLaunchButtonToLaunch();
-        document.getElementById('clientRemoteVersion').textContent = '—';
+        const remoteEl = document.getElementById('clientRemoteVersion');
+        if (remoteEl) remoteEl.textContent = '—';
     } catch (e) {
-        statusEl.textContent = `Ошибка проверки: ${e?.message || e}`;
+        setMainStatus(`Ошибка проверки: ${e?.message || e}`, false);
         setLaunchButtonToLaunch();
     }
 }
@@ -413,6 +506,8 @@ function playTransition(userName) {
         loadSettings();
         startServerPolling();
         checkClientUpdateAndApplyUI();
+        // also check launcher updates and show modal if available
+        try { checkLauncherUpdateAndShowModal(); } catch (e) { }
     }, 1200);
 }
 
@@ -428,133 +523,22 @@ try {
 } catch (e) { }
 
 
-launchBtn.addEventListener('click', async () => {
-    setMainStatus('Запуск игры...', true);
-    const targetHost = localAddress || serverHost;
-    const address = serverPort ? `${targetHost}:${serverPort}` : targetHost;
-    const res = await window.launcher.launch({
-        username: username.value.trim(),
-        serverAddress: address
-    });
-    setMainStatus(res?.msg || 'Команда запуска отправлена.', res?.ok !== false);
-});
 
-downloadBtn.addEventListener('click', async () => {
-    downloadModal.classList.remove('hidden');
-    requestAnimationFrame(() => downloadModal.classList.add('show'));
-    try {
-        await initClientModal();
-    } catch (e) {
-        console.error('Client modal init failed', e);
-    }
-});
 
-// The old Ok button remains as a simple close handler
-downloadOkBtn.addEventListener('click', () => {
-    downloadModal.classList.remove('show');
-    setTimeout(() => downloadModal.classList.add('hidden'), 160);
-});
+// Download modal removed; client update is handled automatically via checkClientUpdateAndApplyUI
 
-// Client update modal logic
-let _latestManifest = null;
-let _downloadedPath = null;
-
-async function initClientModal() {
-    const installedSpan = document.getElementById('clientInstalled');
-    const remoteSpan = document.getElementById('clientRemoteVersion');
-    const statusEl = document.getElementById('clientUpdateStatus');
-    installedSpan.textContent = '—';
-    remoteSpan.textContent = '—';
-    statusEl.textContent = '';
-    // list installed versions
-    try {
-        const res = await window.client.list();
-        if (res?.ok !== false) {
-            installedSpan.textContent = (res.versions || []).join(', ') || '—';
-        }
-    } catch (e) { installedSpan.textContent = '—'; }
-
-    // hook up buttons
-    document.getElementById('clientCheckBtn').onclick = async () => {
-        statusEl.textContent = 'Проверка...';
-        try {
-            const r = await window.clientUpdate.check();
-            if (r?.ok) {
-                _latestManifest = r.manifest;
-                remoteSpan.textContent = _latestManifest.version || '—';
-                statusEl.textContent = 'Манифест загружен';
-                // enable download
-                document.getElementById('clientDownloadBtn').disabled = false;
-            } else {
-                statusEl.textContent = `Ошибка: ${r?.msg || 'неизвестно'}`;
-            }
-        } catch (e) {
-            statusEl.textContent = `Ошибка: ${e?.message || e}`;
-        }
-    };
-
-    document.getElementById('clientDownloadBtn').onclick = async () => {
-        if (!_latestManifest) {
-            statusEl.textContent = 'Сначала проверьте релиз';
-            return;
-        }
-        const url = _latestManifest?.archive?.url;
-        if (!url) {
-            statusEl.textContent = 'Нет URL в манифесте';
-            return;
-        }
-        statusEl.textContent = 'Загрузка...';
-        const progressEl = document.getElementById('clientUpdateProgress');
-        progressEl.style.display = 'inline-block';
-        progressEl.value = 0;
-        // register transient progress handler
-        try {
-            const d = await window.clientUpdate.download(url);
-            if (d?.ok) {
-                _downloadedPath = d.path;
-                statusEl.textContent = 'Загружено';
-                document.getElementById('clientInstallBtn').disabled = false;
-            } else {
-                statusEl.textContent = `Ошибка: ${d?.msg || 'неизвестно'}`;
-            }
-        } catch (e) {
-            statusEl.textContent = `Ошибка: ${e?.message || e}`;
-        }
-    };
-
-    document.getElementById('clientInstallBtn').onclick = async () => {
-        if (!_downloadedPath || !_latestManifest) {
-            statusEl.textContent = 'Нет скачанного файла или манифеста';
-            return;
-        }
-        statusEl.textContent = 'Установка...';
-        const ver = _latestManifest.version || `client-${Date.now()}`;
-        const res = await window.clientUpdate.install(_downloadedPath, ver);
-        if (res?.ok) {
-            statusEl.textContent = 'Установлено';
-            try { const listRes = await window.client.list(); document.getElementById('clientInstalled').textContent = (listRes.versions || []).join(', '); } catch (e) { }
-        } else {
-            statusEl.textContent = `Ошибка установки: ${res?.msg || 'неизвестно'}`;
-        }
-    };
-
-    document.getElementById('clientCloseBtn').onclick = () => {
-        downloadModal.classList.remove('show');
-        setTimeout(() => downloadModal.classList.add('hidden'), 160);
-    };
-}
 
 // Global progress and events
 if (window.clientUpdate?.onProgress) {
     window.clientUpdate.onProgress((d) => {
         try {
-            const progressEl = document.getElementById('clientUpdateProgress');
-            if (!progressEl) return;
+            const progressEl = document.getElementById('updateProgress');
             const percent = d?.percent || (d.total ? Math.round(d.transferred / d.total * 100) : 0);
-            progressEl.style.display = 'inline-block';
-            progressEl.value = percent;
-            const statusEl = document.getElementById('clientUpdateStatus');
-            if (statusEl) statusEl.textContent = `Загрузка: ${percent}%`;
+            if (progressEl) {
+                progressEl.style.display = 'inline-block';
+                progressEl.value = percent;
+            }
+            setMainStatus(`Загрузка клиента: ${percent}%`, true);
         } catch (e) { }
     });
 }
@@ -563,22 +547,16 @@ if (window.clientUpdate?.onEvent) {
     window.clientUpdate.onEvent((ev) => {
         try {
             if (ev?.type === 'installed') {
-                const statusEl = document.getElementById('clientUpdateStatus');
-                if (statusEl) statusEl.textContent = `Установлена версия ${ev.version}`;
-                try { const listRes = window.client.list(); listRes.then(r => { if (r?.ok) document.getElementById('clientInstalled').textContent = (r.versions || []).join(', '); }); } catch (e) { }
+                setMainStatus(`Установлена версия ${ev.version}`, true);
+                try { window.client.installed().then(r => { /* can update UI if needed */ }); } catch (e) { }
             }
         } catch (e) { }
     });
 }
 
-downloadModal.addEventListener('click', (e) => {
-    if (e.target === downloadModal) {
-        downloadModal.classList.remove('show');
-        setTimeout(() => downloadModal.classList.add('hidden'), 160);
-    }
-});
-
 setStatus('Введите ник и пароль.');
+// Default single launch button behavior (may be overwritten later by update check)
+try { setLaunchButtonToLaunch(); } catch (e) { /* client API may not be ready yet */ }
 
 // Initial state
 authView.classList.remove('hidden');
@@ -646,6 +624,8 @@ if (checkUpdatesBtn && updateStatus) {
                         updateStatus.textContent = 'Загрузка...';
                         await window.updates.download();
                     };
+                    // show modal to user for optional install
+                    try { showLauncherUpdateModal(payload?.version || payload?.releaseName || payload?.name, `Вышло новое обновление! Версия ${payload?.version || ''}`); } catch (e) { }
                     break;
                 case 'not-available':
                     updateStatus.textContent = 'Обновлений нет';
@@ -661,6 +641,7 @@ if (checkUpdatesBtn && updateStatus) {
                             updateProgress.style.display = 'inline-block';
                             updateProgress.value = percent;
                         }
+                        if (launcherUpdateStatusEl) launcherUpdateStatusEl.textContent = `Загрузка: ${percent}%`;
                         // Compute ETA if bytesPerSecond and remaining bytes available
                         try {
                             const bytesPerSecond = payload?.bytesPerSecond || 0;
@@ -693,6 +674,11 @@ if (checkUpdatesBtn && updateStatus) {
                     try {
                         // browser notification
                         new Notification('StratCraftLauncher', { body: 'Обновление загружено. Установите и перезапустите приложение.' });
+                    } catch (e) { }
+                    // If modal open - change install button behavior
+                    try {
+                        _launcherUpdateState = 'downloaded';
+                        if (launcherInstallBtn) launcherInstallBtn.textContent = 'Установить и перезапустить';
                     } catch (e) { }
                     break;
                 case 'error':

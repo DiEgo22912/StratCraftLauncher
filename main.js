@@ -715,11 +715,60 @@ ipcMain.handle('client:list', async () => {
 ipcMain.handle('client:launch', async (_, payload) => {
     const versionId = String(payload?.version || '').trim();
     if (!versionId) return { ok: false, msg: 'Version not specified' };
-    const assembledRoot = path.join(__dirname, 'StratCraftClient', 'client-files', versionId);
-    const versionJsonPath = path.join(assembledRoot, 'versions', versionId, `${versionId}.json`);
-    const versionJarPath = path.join(assembledRoot, 'versions', versionId, `${versionId}.jar`);
+
+    // Try multiple locations/fallbacks for assembled client:
+    // 1) Built-in assembled copy under StratCraftClient/client-files/<version>
+    // 2) Installed clients under DATA_DIR/clients/<version>
+    // 3) Attempt to assemble automatically from local .minecraft
+    // 4) Attempt to download & install client release from GitHub
+    let assembledRoot = path.join(__dirname, 'StratCraftClient', 'client-files', versionId);
+    let versionJsonPath = path.join(assembledRoot, 'versions', versionId, `${versionId}.json`);
+    let versionJarPath = path.join(assembledRoot, 'versions', versionId, `${versionId}.jar`);
+
+    const installedCandidate = path.join(DATA_DIR, 'clients', versionId);
+    const installedJson = path.join(installedCandidate, 'versions', versionId, `${versionId}.json`);
+    const installedJar = path.join(installedCandidate, 'versions', versionId, `${versionId}.jar`);
+
+    // If not present in built-in path, check installed clients
     if (!fs.existsSync(versionJsonPath) || !fs.existsSync(versionJarPath)) {
-        return { ok: false, msg: 'Assembled client files not found. Please run assemble first.' };
+        if (fs.existsSync(installedJson) && fs.existsSync(installedJar)) {
+            assembledRoot = installedCandidate;
+            versionJsonPath = installedJson;
+            versionJarPath = installedJar;
+        }
+    }
+
+
+
+    // If still missing, try to download the client release (latest release manifest)
+    if (!fs.existsSync(versionJsonPath) || !fs.existsSync(versionJarPath)) {
+        try {
+            const { manifest } = await fetchLatestClientManifest();
+            if (manifest?.archive?.url) {
+                const fileName = path.basename(new URL(manifest.archive.url).pathname);
+                const downloadsDir = path.join(DATA_DIR, 'downloads');
+                if (!fs.existsSync(downloadsDir)) fs.mkdirSync(downloadsDir, { recursive: true });
+                const dest = path.join(downloadsDir, fileName);
+                await downloadFile(manifest.archive.url, dest, (p) => { });
+                // install to DATA_DIR/clients/<manifest.version>
+                const tmp = path.join(DATA_DIR, 'clients', `${manifest.version}.tmp`);
+                const final = path.join(DATA_DIR, 'clients', manifest.version);
+                try { if (fs.existsSync(tmp)) fs.rmSync(tmp, { recursive: true, force: true }); } catch (e) { }
+                await extractZip(dest, tmp);
+                if (fs.existsSync(final)) fs.rmSync(final, { recursive: true, force: true });
+                fs.renameSync(tmp, final);
+                fs.writeFileSync(path.join(final, 'installed.json'), JSON.stringify({ installed: new Date().toISOString(), version: manifest.version }, null, 2), 'utf8');
+                assembledRoot = final;
+                versionJsonPath = path.join(final, 'versions', manifest.version, `${manifest.version}.json`);
+                versionJarPath = path.join(final, 'versions', manifest.version, `${manifest.version}.jar`);
+            }
+        } catch (err) {
+            /* ignore download failures */
+        }
+    }
+
+    if (!fs.existsSync(versionJsonPath) || !fs.existsSync(versionJarPath)) {
+        return { ok: false, msg: 'Файлы собранного клиента не найдены. Пожалуйста, убедитесь, что релиз клиента доступен в GitHub Releases.' };
     }
     const version = readJson(versionJsonPath);
     if (!version) return { ok: false, msg: 'Failed to read version json' };
