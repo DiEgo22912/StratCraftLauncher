@@ -569,35 +569,15 @@ mainView.classList.add('hidden');
 profileBtn.classList.add('hidden');
 transition.classList.add('hidden');
 
-// Robust remember-me handling: persist both the preference flag and username
+// Basic remember-me behavior: restore username if previously saved; no settings toggle
 const remembered = localStorage.getItem('launcherUser');
-const rememberFlag = localStorage.getItem('rememberMe') === 'true';
 if (remembered) {
     username.value = remembered;
+    // keep login checkbox checked when a remembered name exists
+    try { rememberMe.checked = true; } catch (e) { }
 }
-if (rememberFlag) {
-    rememberMe.checked = true;
-}
-
-// Persist "remember me" when user toggles the checkbox or changes username
-try {
-    rememberMe?.addEventListener('change', () => {
-        try {
-            const enabled = !!rememberMe.checked;
-            localStorage.setItem('rememberMe', enabled ? 'true' : 'false');
-            if (enabled && username.value.trim()) localStorage.setItem('launcherUser', username.value.trim());
-            if (!enabled) localStorage.removeItem('launcherUser');
-        } catch (e) { }
-    });
-    username?.addEventListener('input', () => {
-        try {
-            if (rememberMe.checked) {
-                if (username.value.trim()) localStorage.setItem('launcherUser', username.value.trim());
-            }
-        } catch (e) { }
-    });
-} catch (e) { }
-
+// Cleanup legacy flag if present
+try { localStorage.removeItem('rememberMe'); } catch (e) { }
 function initAnimations() {
     if (!window.lottie) return;
     const settingsAnim = document.getElementById('settingsAnim');
