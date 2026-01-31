@@ -263,6 +263,11 @@ logoutBtn.addEventListener('click', () => {
     profileDrawer.classList.remove('show');
     setTimeout(() => profileDrawer.classList.add('hidden'), 200);
     stopServerPolling();
+    // persist username on logout if remember checked
+    try {
+        if (rememberMe.checked && username.value.trim()) localStorage.setItem('launcherUser', username.value.trim());
+        else localStorage.removeItem('launcherUser');
+    } catch (e) { }
     authView.classList.remove('hidden');
     mainView.classList.add('hidden');
     profileBtn.classList.add('hidden');
@@ -410,6 +415,18 @@ function playTransition(userName) {
         checkClientUpdateAndApplyUI();
     }, 1200);
 }
+
+// Persist username on window close if remember is checked (handles closing immediately after login)
+try {
+    window.addEventListener('beforeunload', () => {
+        try {
+            if (rememberMe?.checked && username?.value && username.value.trim()) {
+                localStorage.setItem('launcherUser', username.value.trim());
+            }
+        } catch (e) { }
+    });
+} catch (e) { }
+
 
 launchBtn.addEventListener('click', async () => {
     setMainStatus('Запуск игры...', true);
