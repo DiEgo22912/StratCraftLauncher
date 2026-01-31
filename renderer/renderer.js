@@ -406,7 +406,7 @@ if (checkUpdatesBtn && updateStatus) {
                 case 'not-available':
                     updateStatus.textContent = 'Обновлений нет';
                     if (updateProgress) { updateProgress.style.display = 'none'; updateProgress.value = 0; }
-                    checkUpdatesBtn.textContent = 'Проверить обновления';
+                    checkUpdatesBtn.textContent = 'Проверить обновления лаунчера';
                     checkUpdatesBtn.onclick = () => window.updates.check();
                     break;
                 case 'download-progress':

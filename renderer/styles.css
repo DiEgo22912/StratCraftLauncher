@@ -312,6 +312,22 @@ header.in-main #appTitle.slide-in {
     font-weight: bold;
 }
 
+/* Smaller, neater variant for single-line settings */
+.checkbox.small {
+    gap: 8px;
+    font-size: 13px;
+}
+
+.checkbox.small input[type="checkbox"] {
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+}
+
+.checkbox.small input[type="checkbox"]:checked::after {
+    font-size: 10px;
+}
+
 input {
     width: 100%;
     padding: 12px 14px;
