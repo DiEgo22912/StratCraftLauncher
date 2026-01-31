@@ -537,6 +537,119 @@ ipcMain.handle('launcher:launch', (_, payload) => {
     }
 });
 
+ipcMain.handle('client:assemble', async (_, opts) => {
+    // Assemble client from a local Minecraft directory. opts: { mcDir, versionPattern }
+    const mcDir = String(opts?.mcDir || path.join(app.getPath('appData'), '.minecraft'));
+    const versionPattern = String(opts?.versionPattern || '1.20.1.*forge.*47.4.16');
+    const script = path.join(__dirname, 'StratCraftClient', 'assemble-from-local.js');
+    if (!fs.existsSync(script)) return { ok: false, msg: 'assemble script not found' };
+    try {
+        const res = spawn(process.execPath, [script, mcDir, versionPattern], { cwd: __dirname, stdio: 'inherit' });
+        return await new Promise((resolve) => {
+            res.on('close', (code) => {
+                if (code === 0) resolve({ ok: true, msg: 'Assembled client' });
+                else resolve({ ok: false, msg: `assemble script exited ${code}` });
+            });
+        });
+    } catch (err) {
+        return { ok: false, msg: String(err) };
+    }
+});
+
+ipcMain.handle('client:list', async () => {
+    const root = path.join(__dirname, 'StratCraftClient', 'client-files');
+    if (!fs.existsSync(root)) return { ok: true, versions: [] };
+    const entries = fs.readdirSync(root, { withFileTypes: true }).filter(d => d.isDirectory()).map(d => d.name);
+    return { ok: true, versions: entries };
+});
+
+ipcMain.handle('client:launch', async (_, payload) => {
+    const versionId = String(payload?.version || '').trim();
+    if (!versionId) return { ok: false, msg: 'Version not specified' };
+    const assembledRoot = path.join(__dirname, 'StratCraftClient', 'client-files', versionId);
+    const versionJsonPath = path.join(assembledRoot, 'versions', versionId, `${versionId}.json`);
+    const versionJarPath = path.join(assembledRoot, 'versions', versionId, `${versionId}.jar`);
+    if (!fs.existsSync(versionJsonPath) || !fs.existsSync(versionJarPath)) {
+        return { ok: false, msg: 'Assembled client files not found. Please run assemble first.' };
+    }
+    const version = readJson(versionJsonPath);
+    if (!version) return { ok: false, msg: 'Failed to read version json' };
+
+    const settings = loadSettings();
+    const minRamGb = Number(settings.minRamGb ?? 2);
+    const maxRamGb = Number(settings.maxRamGb ?? 6);
+    const javaCmd = resolveJavaCommand();
+
+    const username = String(payload?.username || 'Player');
+    const uuid = String(payload?.uuid || offlineUuid(username));
+    const accessToken = String(payload?.accessToken || '0');
+
+    const mcDir = assembledRoot; // treat assembled root as mc directory
+
+    const assetsIndex = version.assets || version.assetIndex?.id || 'legacy';
+    const assetsIndexPath = path.join(mcDir, 'assets', 'indexes', `${assetsIndex}.json`);
+    if (!fs.existsSync(assetsIndexPath)) {
+        return { ok: false, msg: 'Assets index not found in assembled client.' };
+    }
+
+    const classpathSeparator = isWindows() ? ';' : ':';
+    const { classpath, missing } = buildClasspath(version, versionJarPath, mcDir);
+    if (missing.length > 0) return { ok: false, msg: `Missing libraries: ${missing.join(', ')}` };
+
+    const vars = {
+        auth_player_name: username,
+        version_name: version.id || versionId,
+        game_directory: path.join(__dirname, 'StratCraftClient', 'instances', versionId),
+        assets_root: path.join(mcDir, 'assets'),
+        assets_index_name: assetsIndex,
+        auth_uuid: uuid,
+        auth_access_token: accessToken,
+        clientid: '0',
+        auth_xuid: '0',
+        user_type: 'mojang',
+        version_type: version.type || 'release',
+        natives_directory: path.join(__dirname, 'StratCraftClient', 'instances', versionId, 'natives'),
+        classpath: classpath.join(classpathSeparator),
+        classpath_separator: classpathSeparator,
+        library_directory: path.join(mcDir, 'libraries'),
+        launcher_name: 'StratCraftLauncher',
+        launcher_version: app.getVersion()
+    };
+
+    const jvmArgs = substituteArgs(flattenArgs(version?.arguments?.jvm), vars);
+    const gameArgs = substituteArgs(flattenArgs(version?.arguments?.game), vars);
+    const serverAddress = String(payload?.serverAddress || '').trim();
+    if (serverAddress) gameArgs.push('--quickPlayMultiplayer', serverAddress);
+
+    const args = [
+        `-Xms${minRamGb}G`,
+        `-Xmx${maxRamGb}G`,
+        ...jvmArgs,
+        '-Djava.library.path=' + vars.natives_directory,
+        version.mainClass,
+        ...gameArgs
+    ];
+
+    // Ensure instance dir exists
+    const instanceDir = vars.game_directory;
+    try {
+        if (!fs.existsSync(instanceDir)) fs.mkdirSync(instanceDir, { recursive: true });
+    } catch (e) { /* ignore */ }
+
+    try {
+        const child = spawn(javaCmd, args, {
+            cwd: instanceDir,
+            detached: true,
+            stdio: 'ignore',
+            windowsHide: true
+        });
+        child.unref();
+        return { ok: true, msg: 'Client launching.' };
+    } catch (err) {
+        return { ok: false, msg: `Launch error: ${err.message}` };
+    }
+});
+
 ipcMain.handle('server:status', async () => {
     const port = readServerPort();
     try {

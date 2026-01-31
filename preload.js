@@ -14,6 +14,12 @@ contextBridge.exposeInMainWorld('launcher', {
     selectDirectory: () => ipcRenderer.invoke('launcher:selectDirectory')
 });
 
+contextBridge.exposeInMainWorld('client', {
+    assemble: (opts) => ipcRenderer.invoke('client:assemble', opts),
+    list: () => ipcRenderer.invoke('client:list'),
+    launch: (opts) => ipcRenderer.invoke('client:launch', opts)
+});
+
 contextBridge.exposeInMainWorld('updates', {
     check: () => ipcRenderer.invoke('update:check'),
     download: () => ipcRenderer.invoke('update:download'),

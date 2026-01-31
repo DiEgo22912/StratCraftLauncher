@@ -309,6 +309,20 @@ saveSettingsBtn.addEventListener('click', async () => {
     }
 });
 
+launchClientBtn?.addEventListener('click', async () => {
+    setMainStatus('Запуск клиента...', true);
+    const targetHost = localAddress || serverHost;
+    const address = serverPort ? `${targetHost}:${serverPort}` : targetHost;
+    // For launch we pass any available auth tokens (not stored in repo). If you have a token file
+    // the UI/logic can be extended to pick it. For now we use offline UUID and username.
+    const res = await window.client.launch({
+        version: '1.20.1-forge-47.4.16',
+        username: username.value.trim(),
+        serverAddress: address
+    });
+    setMainStatus(res?.msg || 'Команда запуска отправлена.', res?.ok !== false);
+});
+
 launchBtn.addEventListener('click', async () => {
     setMainStatus('Запуск игры...', true);
     const targetHost = localAddress || serverHost;
