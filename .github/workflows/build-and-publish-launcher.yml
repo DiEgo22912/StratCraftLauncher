@@ -57,21 +57,26 @@ jobs:
           if (-not $installer) { Write-Error "Installer not found in dist/"; exit 1 }
           Write-Host "Installer: $($installer.FullName)"
           echo "installer_path=$($installer.FullName)" >> $env:GITHUB_ENV
+          echo "installer_name=$($installer.Name)" >> $env:GITHUB_ENV
           $latest = Join-Path -Path $installer.DirectoryName -ChildPath 'latest.yml'
           if (-not (Test-Path $latest)) { Write-Warning "latest.yml not found next to installer; electron-builder should generate it." }
           echo "latest_path=$latest" >> $env:GITHUB_ENV
 
       - name: Upload installer to release
         uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ github.event_name == 'release' && github.event.release.upload_url || steps.create_release.outputs.upload_url }}
           asset_path: ${{ env.installer_path }}
-          asset_name: ${{ env.installer_path }}
+          asset_name: ${{ env.installer_name }}
           asset_content_type: application/octet-stream
 
       - name: Upload latest.yml to release (if present)
         if: ${{ env.latest_path != '' }}
         uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ github.event_name == 'release' && github.event.release.upload_url || steps.create_release.outputs.upload_url }}
           asset_path: ${{ env.latest_path }}
