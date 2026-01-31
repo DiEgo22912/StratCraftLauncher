@@ -8,7 +8,8 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    # Use Windows runner to build NSIS installer reliably
+    runs-on: windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -24,7 +25,8 @@ jobs:
 
       - name: Build Windows NSIS installer and publish
         env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          # Use the workflow GITHUB_TOKEN to publish; can be replaced by a PAT in GH_TOKEN secret
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npx electron-builder --win nsis --publish always
 
       - name: Upload dist (debug)
