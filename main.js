@@ -658,8 +658,13 @@ app.whenReady().then(async () => {
             const final = path.join(clientsRoot, version);
             if (fs.existsSync(tmp)) fs.rmSync(tmp, { recursive: true, force: true });
 
+            // Send install-started event
+            mainWindow?.webContents?.send('client:update:event', { type: 'install-started', version });
+
             // Extract to temp directory
+            mainWindow?.webContents?.send('client:update:event', { type: 'install-progress', step: 'extracting', percent: 20 });
             await extractZip(zipPath, tmp);
+            mainWindow?.webContents?.send('client:update:event', { type: 'install-progress', step: 'extracted', percent: 60 });
 
             // Detect actual version ID from extracted structure
             let detectedVersion = version;
@@ -678,6 +683,8 @@ app.whenReady().then(async () => {
                 console.error('[Client Update] Failed to detect version:', e);
             }
 
+            mainWindow?.webContents?.send('client:update:event', { type: 'install-progress', step: 'finalizing', percent: 80 });
+
             // Atomically replace
             if (fs.existsSync(final)) {
                 try {
@@ -695,6 +702,7 @@ app.whenReady().then(async () => {
                 detectedVersion
             };
             fs.writeFileSync(path.join(final, 'installed.json'), JSON.stringify(meta, null, 2), 'utf8');
+            mainWindow?.webContents?.send('client:update:event', { type: 'install-progress', step: 'complete', percent: 100 });
             mainWindow?.webContents?.send('client:update:event', { type: 'installed', version: detectedVersion });
             return { ok: true, detectedVersion };
         } catch (err) {

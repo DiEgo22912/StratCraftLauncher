@@ -91,6 +91,17 @@
                             <span id="serverState">Оффлайн</span>
                             <span id="serverPlayers" class="server-players">0/0</span>
                         </div>
+                        <!-- Client download/install progress bar -->
+                        <div id="clientProgressContainer" class="client-progress-container" style="display: none;">
+                            <div class="client-progress-header">
+                                <span id="clientProgressText">0%</span>
+                                <span id="clientProgressSpeed"></span>
+                                <span id="clientProgressEta"></span>
+                            </div>
+                            <div class="client-progress-track">
+                                <div id="clientProgressBar" class="client-progress-bar"></div>
+                            </div>
+                        </div>
                     </div>
                     <div class="play-actions" style="display:flex; gap:8px; align-items:center;">
                         <button id="launchBtn" class="btn play">Запустить</button>

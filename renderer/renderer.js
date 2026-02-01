@@ -702,14 +702,24 @@ async function checkClientUpdateAndApplyUI() {
         const res = await window.clientUpdate.check();
         if (res?.ok && res.manifest) {
             const manifest = res.manifest;
-            // determine if installed version matches manifest.version
-            const installedNames = installed.map(x => x.meta?.version || x.name);
-            if (!installedNames.includes(manifest.version)) {
+            // Determine if installed version matches manifest.version
+            // Check all possible version fields in installed clients
+            const isVersionInstalled = installed.some(client => {
+                const meta = client.meta || {};
+                const folderName = client.name;
+                // Compare against folder name, version, and detectedVersion
+                return folderName === manifest.version ||
+                    meta.version === manifest.version ||
+                    meta.detectedVersion === manifest.version;
+            });
+
+            if (!isVersionInstalled) {
                 // update available
                 hideCheckReleaseButton();
                 setLaunchButtonToUpdate(manifest);
                 const remoteEl = document.getElementById('clientRemoteVersion');
                 if (remoteEl) remoteEl.textContent = manifest.version || '—';
+                setMainStatus(`Доступна новая версия: ${manifest.version}`, true);
                 return;
             }
         } else if (res?.ok === false) {
@@ -723,10 +733,11 @@ async function checkClientUpdateAndApplyUI() {
             showCheckReleaseButton();
             return;
         }
-        // no update
+        // no update - client is up to date
         // prefer an installed client version if present
         const preferred = (installed && installed.length > 0) ? (installed[0].meta?.detectedVersion || installed[0].meta?.version || installed[0].name) : undefined;
         setLaunchButtonToLaunch(preferred);
+        setMainStatus('Клиент актуален. Готово к запуску.', true);
         const remoteEl = document.getElementById('clientRemoteVersion');
         if (remoteEl) remoteEl.textContent = '—';
     } catch (e) {
@@ -789,35 +800,105 @@ try {
 // Download modal removed; client update is handled automatically via checkClientUpdateAndApplyUI
 
 
+// Format bytes to human readable
+function formatBytes(bytes) {
+    if (bytes < 1024) return bytes + ' Б';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' КБ';
+    if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' МБ';
+    return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' ГБ';
+}
+
+// Format seconds to mm:ss
+function formatEta(seconds) {
+    if (!seconds || seconds <= 0) return '--:--';
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
 // Global progress and events
 if (window.clientUpdate?.onProgress) {
     window.clientUpdate.onProgress((d) => {
         try {
-            const progressEl = document.getElementById('updateProgress');
+            const progressContainer = document.getElementById('clientProgressContainer');
+            const progressBar = document.getElementById('clientProgressBar');
+            const progressText = document.getElementById('clientProgressText');
+            const progressSpeed = document.getElementById('clientProgressSpeed');
+            const progressEta = document.getElementById('clientProgressEta');
+
             const percent = d?.percent || (d.total ? Math.round(d.transferred / d.total * 100) : 0);
-            if (progressEl) {
-                progressEl.style.display = 'inline-block';
-                progressEl.value = percent;
+            const bytesPerSec = d?.bytesPerSecond || 0;
+            const transferred = d?.transferred || 0;
+            const total = d?.total || 0;
+
+            // Show progress container
+            if (progressContainer) progressContainer.style.display = 'block';
+            if (progressBar) progressBar.style.width = percent + '%';
+            if (progressText) progressText.textContent = `${percent}% · ${formatBytes(transferred)} / ${formatBytes(total)}`;
+            if (progressSpeed) progressSpeed.textContent = formatBytes(bytesPerSec) + '/с';
+
+            // Calculate ETA
+            if (progressEta && bytesPerSec > 0 && total > transferred) {
+                const remaining = total - transferred;
+                const etaSec = Math.floor(remaining / bytesPerSec);
+                progressEta.textContent = 'ETA: ' + formatEta(etaSec);
+            } else if (progressEta) {
+                progressEta.textContent = '';
             }
+
             setMainStatus(`Загрузка клиента: ${percent}%`, true);
-        } catch (e) { }
+        } catch (e) { console.error('Progress error:', e); }
     });
 }
 
 if (window.clientUpdate?.onEvent) {
     window.clientUpdate.onEvent((ev) => {
         try {
-            if (ev?.type === 'installed') {
+            const progressContainer = document.getElementById('clientProgressContainer');
+            const progressBar = document.getElementById('clientProgressBar');
+            const progressText = document.getElementById('clientProgressText');
+            const progressSpeed = document.getElementById('clientProgressSpeed');
+            const progressEta = document.getElementById('clientProgressEta');
+
+            if (ev?.type === 'install-started') {
+                // Show progress bar for installation
+                if (progressContainer) progressContainer.style.display = 'block';
+                if (progressBar) progressBar.style.width = '0%';
+                if (progressText) progressText.textContent = 'Начало установки...';
+                if (progressSpeed) progressSpeed.textContent = '';
+                if (progressEta) progressEta.textContent = '';
+                setMainStatus('Установка клиента...', true);
+            } else if (ev?.type === 'install-progress') {
+                // Update installation progress
+                const stepText = {
+                    'extracting': 'Распаковка архива...',
+                    'extracted': 'Файлы распакованы',
+                    'finalizing': 'Завершение установки...',
+                    'complete': 'Установка завершена!'
+                };
+                if (progressContainer) progressContainer.style.display = 'block';
+                if (progressBar) progressBar.style.width = (ev.percent || 0) + '%';
+                if (progressText) progressText.textContent = stepText[ev.step] || `${ev.percent}%`;
+                if (progressSpeed) progressSpeed.textContent = '';
+                if (progressEta) progressEta.textContent = '';
+                setMainStatus(stepText[ev.step] || `Установка: ${ev.percent}%`, true);
+            } else if (ev?.type === 'installed') {
+                // Hide progress bar after successful install
+                if (progressContainer) {
+                    setTimeout(() => { progressContainer.style.display = 'none'; }, 1500);
+                }
                 setMainStatus(`Установлена версия ${ev.version}`, true);
                 try { window.client.installed().then(r => { /* can update UI if needed */ }); } catch (e) { }
                 // refresh UI to pick up installed version
                 try { checkClientUpdateAndApplyUI(); } catch (e) { }
             } else if (ev?.type === 'download-failed') {
+                if (progressContainer) progressContainer.style.display = 'none';
                 setMainStatus(`Ошибка загрузки релиза: ${ev.msg || 'неизвестно'}`, false);
             } else if (ev?.type === 'install-failed') {
+                if (progressContainer) progressContainer.style.display = 'none';
                 setMainStatus(`Ошибка установки релиза: ${ev.msg || 'неизвестно'}`, false);
             }
-        } catch (e) { }
+        } catch (e) { console.error('Event handler error:', e); }
     });
 }
 

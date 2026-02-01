@@ -954,6 +954,81 @@ input[type="range"] {
     animation: intro 1200ms ease forwards;
 }
 
+/* Client download/install progress bar */
+.client-progress-container {
+    margin-top: 12px;
+    padding: 12px 16px;
+    background: rgba(20, 24, 32, 0.8);
+    border: 1px solid rgba(43, 107, 179, 0.3);
+    border-radius: 10px;
+    backdrop-filter: blur(10px);
+}
+
+.client-progress-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    font-size: 12px;
+    color: #9aa4b2;
+}
+
+.client-progress-header span {
+    display: inline-block;
+}
+
+#clientProgressText {
+    font-weight: 600;
+    color: #e9eef6;
+}
+
+#clientProgressSpeed {
+    color: #2b6bb3;
+    font-weight: 500;
+}
+
+#clientProgressEta {
+    color: #6f7a88;
+}
+
+.client-progress-track {
+    height: 8px;
+    background: rgba(43, 47, 58, 0.6);
+    border-radius: 4px;
+    overflow: hidden;
+    position: relative;
+}
+
+.client-progress-bar {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, #2b6bb3, #4a9eff);
+    border-radius: 4px;
+    transition: width 0.3s ease;
+    position: relative;
+}
+
+.client-progress-bar::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+    animation: progress-shimmer 1.5s infinite;
+}
+
+@keyframes progress-shimmer {
+    0% {
+        transform: translateX(-100%);
+    }
+
+    100% {
+        transform: translateX(100%);
+    }
+}
+
 @keyframes intro {
     0% {
         transform: translateY(-30px) scale(0.9);
