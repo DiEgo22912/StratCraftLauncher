@@ -55,6 +55,73 @@ async function migrateTokenToKeytar() {
     }
 }
 
+// Migrate data from old location (__dirname) to new location (userData)
+async function migrateOldDataToUserData() {
+    try {
+        // Old paths (before v1.1.4) - inside installation directory
+        const oldDataDir = path.join(__dirname, 'data');
+        const oldClientsDir = path.join(oldDataDir, 'clients');
+
+        // New paths (v1.1.4+) - in %APPDATA%
+        const newClientsDir = path.join(DATA_DIR, 'clients');
+
+        // Check if old clients directory exists and new one doesn't have the same data
+        if (fs.existsSync(oldClientsDir) && fs.statSync(oldClientsDir).isDirectory()) {
+            console.log('[Migration] Found old clients directory:', oldClientsDir);
+
+            // Ensure new clients directory exists
+            if (!fs.existsSync(newClientsDir)) {
+                fs.mkdirSync(newClientsDir, { recursive: true });
+            }
+
+            // Get list of installed clients in old location
+            const oldClients = fs.readdirSync(oldClientsDir, { withFileTypes: true })
+                .filter(d => d.isDirectory())
+                .map(d => d.name);
+
+            console.log('[Migration] Found old clients:', oldClients);
+
+            // Copy each client to new location if it doesn't exist there
+            for (const clientName of oldClients) {
+                const oldClientPath = path.join(oldClientsDir, clientName);
+                const newClientPath = path.join(newClientsDir, clientName);
+
+                if (!fs.existsSync(newClientPath)) {
+                    console.log(`[Migration] Migrating client ${clientName}...`);
+                    try {
+                        // Copy directory recursively
+                        fs.cpSync(oldClientPath, newClientPath, { recursive: true });
+                        console.log(`[Migration] Successfully migrated ${clientName}`);
+                    } catch (err) {
+                        console.error(`[Migration] Failed to migrate ${clientName}:`, err);
+                    }
+                } else {
+                    console.log(`[Migration] Client ${clientName} already exists in new location, skipping`);
+                }
+            }
+
+            console.log('[Migration] Client migration completed');
+        }
+
+        // Migrate user data and settings if they exist in old location
+        const oldUsersPath = path.join(oldDataDir, 'users.json');
+        const oldSettingsPath = path.join(oldDataDir, 'launcher-settings.json');
+
+        if (fs.existsSync(oldUsersPath) && !fs.existsSync(USERS_PATH)) {
+            console.log('[Migration] Migrating users.json...');
+            fs.copyFileSync(oldUsersPath, USERS_PATH);
+        }
+
+        if (fs.existsSync(oldSettingsPath) && !fs.existsSync(SETTINGS_PATH)) {
+            console.log('[Migration] Migrating launcher-settings.json...');
+            fs.copyFileSync(oldSettingsPath, SETTINGS_PATH);
+        }
+    } catch (e) {
+        console.error('[Migration] Data migration failed:', e);
+        // Don't throw - migration is optional, app should work even if it fails
+    }
+}
+
 function ensureDataFiles() {
     if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
     if (!fs.existsSync(USERS_PATH)) fs.writeFileSync(USERS_PATH, JSON.stringify([]), 'utf8');
@@ -359,8 +426,10 @@ function createWindow() {
     win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
     ensureDataFiles();
+    // Migrate data from old location to new location (v1.1.4+ migration)
+    await migrateOldDataToUserData();
     // Try to migrate any token saved in settings to keytar
     migrateTokenToKeytar().catch(() => { });
     Menu.setApplicationMenu(null);
