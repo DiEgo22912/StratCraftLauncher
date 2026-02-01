@@ -2,7 +2,7 @@ const { app, BrowserWindow, ipcMain, Menu, dialog, Notification } = require('ele
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 const net = require('net');
 const os = require('os');
 const { autoUpdater } = require('electron-updater');
@@ -22,11 +22,38 @@ const SERVER_HOST = 'wad-sb.gl.joinmc.link';
 const SERVER_PROPERTIES = path.join(__dirname, '..', 'server.properties');
 const DEFAULT_PORT = 25565;
 
+// Optional secure token storage using OS credential store (keytar)
+let keytar = null;
+let hasKeytar = false;
+const KEYTAR_SERVICE = 'StratCraftLauncher';
+const KEYTAR_ACCOUNT = 'auth-token';
+try {
+    keytar = require('keytar');
+    hasKeytar = true;
+} catch (e) {
+    console.warn('Keytar not available; falling back to settings file for token storage. To enable, install keytar and rebuild native modules.');
+}
+
+async function migrateTokenToKeytar() {
+    if (!hasKeytar) return;
+    try {
+        const s = loadSettings() || {};
+        if (s.authToken) {
+            await keytar.setPassword(KEYTAR_SERVICE, KEYTAR_ACCOUNT, s.authToken);
+            delete s.authToken;
+            saveSettings(s);
+            console.log('Migrated auth token to keytar');
+        }
+    } catch (e) {
+        console.warn('Token migration failed', e);
+    }
+}
+
 function ensureDataFiles() {
     if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
     if (!fs.existsSync(USERS_PATH)) fs.writeFileSync(USERS_PATH, JSON.stringify([]), 'utf8');
     if (!fs.existsSync(SETTINGS_PATH)) {
-        fs.writeFileSync(SETTINGS_PATH, JSON.stringify({ maxRamGb: 6 }, null, 2), 'utf8');
+        fs.writeFileSync(SETTINGS_PATH, JSON.stringify({ maxRamGb: 6, authStaySignedIn: false }, null, 2), 'utf8');
     }
 }
 
@@ -124,13 +151,20 @@ function pingServer(host, port, timeoutMs = 3000) {
         let dataBuffer = Buffer.alloc(0);
         const protocol = 767;
 
-        const onError = (err) => {
-            socket.destroy();
-            reject(err);
+        let settled = false;
+        const finish = (err, val) => {
+            if (settled) return;
+            settled = true;
+            try { socket.destroy(); } catch (e) { }
+            if (err) return reject(err);
+            return resolve(val);
         };
+
+        const onError = (err) => finish(err);
 
         socket.setTimeout(timeoutMs, () => onError(new Error('timeout')));
         socket.once('error', onError);
+        socket.once('close', () => { if (!settled) finish(new Error('closed without data')); });
 
         socket.connect(port, host, () => {
             const handshake = createPacket([
@@ -159,13 +193,15 @@ function pingServer(host, port, timeoutMs = 3000) {
             if (!strInfo) return;
             const strStart = idInfo.size + strInfo.size;
             const jsonStr = packet.slice(strStart, strStart + strInfo.value).toString('utf8');
-            socket.end();
             try {
-                resolve(JSON.parse(jsonStr));
+                finish(null, JSON.parse(jsonStr));
             } catch (err) {
-                reject(err);
+                finish(err);
             }
         });
+
+        // safety: absolute timeout
+        setTimeout(() => { if (!settled) finish(new Error('absolute timeout')); }, timeoutMs + 500);
     });
 }
 
@@ -319,6 +355,8 @@ function createWindow() {
 
 app.whenReady().then(() => {
     ensureDataFiles();
+    // Try to migrate any token saved in settings to keytar
+    migrateTokenToKeytar().catch(() => { });
     Menu.setApplicationMenu(null);
     createWindow();
 
@@ -376,42 +414,90 @@ app.whenReady().then(() => {
     const GITHUB_CLIENT_REPO = 'StratCraftClient';
     const GITHUB_CLIENT_API = `https://api.github.com/repos/${GITHUB_CLIENT_OWNER}/${GITHUB_CLIENT_REPO}`;
 
-    function fetchJson(url) {
+    function fetchJson(url, redirectsLeft = 10, isAssetDownload = false) {
         return new Promise((resolve, reject) => {
             const https = require('https');
-            const opts = new URL(url);
-            opts.headers = { 'User-Agent': 'StratCraftLauncher', 'Accept': 'application/vnd.github+json' };
-            https.get(opts, (res) => {
-                let buf = '';
-                res.setEncoding('utf8');
-                res.on('data', d => buf += d);
-                res.on('end', () => {
-                    if (res.statusCode >= 200 && res.statusCode < 300) {
-                        try { resolve(JSON.parse(buf)); } catch (e) { reject(e); }
-                    } else {
-                        reject(new Error(`HTTP ${res.statusCode} for ${url}`));
+            const http = require('http');
+            try {
+                const parsedUrl = new URL(url);
+                const client = (parsedUrl.protocol === 'http:') ? http : https;
+                // For asset downloads (browser_download_url), don't send GitHub API headers
+                const headers = isAssetDownload
+                    ? { 'User-Agent': 'StratCraftLauncher' }
+                    : { 'User-Agent': 'StratCraftLauncher', 'Accept': 'application/vnd.github+json' };
+                const opts = {
+                    hostname: parsedUrl.hostname,
+                    port: parsedUrl.port || (parsedUrl.protocol === 'https:' ? 443 : 80),
+                    path: parsedUrl.pathname + parsedUrl.search,
+                    method: 'GET',
+                    headers: headers
+                };
+                const req = client.request(opts, (res) => {
+                    // follow redirects
+                    if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+                        if (redirectsLeft > 0) {
+                            try { req.destroy(); } catch (e) { }
+                            const newUrl = new URL(res.headers.location, url).toString();
+                            // Mark as asset download for subsequent redirects (they go to Azure Blob)
+                            return resolve(fetchJson(newUrl, redirectsLeft - 1, true));
+                        } else {
+                            return reject(new Error('Too many redirects'));
+                        }
                     }
+                    let buf = '';
+                    res.setEncoding('utf8');
+                    res.on('data', d => buf += d);
+                    res.on('end', () => {
+                        if (res.statusCode >= 200 && res.statusCode < 300) {
+                            try { resolve(JSON.parse(buf)); } catch (e) { reject(new Error(`Invalid JSON: ${e.message}`)); }
+                        } else {
+                            reject(new Error(`HTTP ${res.statusCode} for ${url}`));
+                        }
+                    });
                 });
-            }).on('error', reject);
+                req.on('error', reject);
+                req.end();
+            } catch (err) {
+                reject(err);
+            }
         });
     }
 
     async function fetchLatestClientManifest() {
+        console.log('[Client Update] Fetching latest release info...');
         const rel = await fetchJson(`${GITHUB_CLIENT_API}/releases/latest`);
+        console.log('[Client Update] Found release:', rel?.tag_name);
         const manifestAsset = (rel?.assets || []).find(a => a.name === 'client-manifest.json');
         if (!manifestAsset) throw new Error('client-manifest.json asset not found in latest release');
-        const manifest = await fetchJson(manifestAsset.browser_download_url);
+        console.log('[Client Update] Fetching manifest from:', manifestAsset.browser_download_url);
+        // browser_download_url will redirect (302) to Azure Blob - mark as asset download
+        const manifest = await fetchJson(manifestAsset.browser_download_url, 10, true);
+        console.log('[Client Update] Manifest loaded, version:', manifest?.version);
         return { manifest, release: rel };
     }
 
-    function downloadFile(url, destPath, onProgress) {
+    function downloadFile(url, destPath, onProgress, redirectsLeft = 5) {
         return new Promise((resolve, reject) => {
             const https = require('https');
+            const http = require('http');
             const fs = require('fs');
-            const req = https.get(url, { headers: { 'User-Agent': 'StratCraftLauncher' } }, (res) => {
-                if (res.statusCode && res.statusCode >= 400) return reject(new Error(`HTTP ${res.statusCode}`));
+            const parsed = new URL(url);
+            const client = parsed.protocol === 'http:' ? http : https;
+            const req = client.get(url, { headers: { 'User-Agent': 'StratCraftLauncher' } }, (res) => {
+                // Handle redirects
+                if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+                    if (redirectsLeft > 0) {
+                        try { req.destroy(); } catch (e) { }
+                        return resolve(downloadFile(new URL(res.headers.location, url).toString(), destPath, onProgress, redirectsLeft - 1));
+                    } else {
+                        return reject(new Error('Too many redirects'));
+                    }
+                }
+                if (res.statusCode && (res.statusCode < 200 || res.statusCode >= 300)) return reject(new Error(`HTTP ${res.statusCode}`));
                 const total = parseInt(res.headers['content-length'] || '0', 10);
                 let transferred = 0;
+                // ensure destination directory exists
+                try { fs.mkdirSync(require('path').dirname(destPath), { recursive: true }); } catch (e) { }
                 const out = fs.createWriteStream(destPath);
                 let lastTime = Date.now();
                 let lastTransferred = 0;
@@ -427,7 +513,7 @@ app.whenReady().then(() => {
                     }
                 });
                 res.on('end', () => { out.end(); resolve(); });
-                res.on('error', (err) => { out.close(); reject(err); });
+                res.on('error', (err) => { try { out.close(); } catch (e) { } reject(err); });
             });
             req.on('error', reject);
         });
@@ -474,6 +560,7 @@ app.whenReady().then(() => {
             await downloadFile(url, dest);
             return { ok: true, path: dest };
         } catch (err) {
+            try { mainWindow?.webContents?.send('client:update:event', { type: 'download-failed', msg: err?.message || String(err) }); } catch (e) { }
             return { ok: false, msg: err?.message || String(err) };
         }
     });
@@ -489,12 +576,21 @@ app.whenReady().then(() => {
             // atomically replace
             if (fs.existsSync(final)) fs.rmSync(final, { recursive: true, force: true });
             fs.renameSync(tmp, final);
-            // write metadata
-            const meta = { installed: new Date().toISOString(), version };
+            // write metadata and detect inner version id if possible
+            let detectedVersion = version;
+            try {
+                const versionsDir = path.join(final, 'versions');
+                if (fs.existsSync(versionsDir)) {
+                    const inner = fs.readdirSync(versionsDir, { withFileTypes: true }).filter(d => d.isDirectory()).map(d => d.name)[0];
+                    if (inner) detectedVersion = inner;
+                }
+            } catch (e) { }
+            const meta = { installed: new Date().toISOString(), version, detectedVersion };
             fs.writeFileSync(path.join(final, 'installed.json'), JSON.stringify(meta, null, 2), 'utf8');
-            mainWindow?.webContents?.send('client:update:event', { type: 'installed', version });
+            mainWindow?.webContents?.send('client:update:event', { type: 'installed', version: detectedVersion });
             return { ok: true };
         } catch (err) {
+            try { mainWindow?.webContents?.send('client:update:event', { type: 'install-failed', msg: err?.message || String(err) }); } catch (e) { }
             return { ok: false, msg: err?.message || String(err) };
         }
     });
@@ -572,6 +668,66 @@ ipcMain.handle('auth:login', (_, payload) => {
     return { ok: true, msg: `Добро пожаловать, ${user.username}!`, username: user.username };
 });
 
+// Secure token storage using keytar when available, fallback to settings file
+ipcMain.handle('auth:saveToken', async (_, token) => {
+    try {
+        if (hasKeytar) {
+            await keytar.setPassword(KEYTAR_SERVICE, KEYTAR_ACCOUNT, token);
+            return { ok: true };
+        }
+        const s = loadSettings() || {};
+        s.authToken = token;
+        saveSettings(s);
+        return { ok: true };
+    } catch (e) {
+        console.error('auth:saveToken error', e);
+        return { ok: false, msg: 'Не удалось сохранить токен.' };
+    }
+});
+
+ipcMain.handle('auth:getToken', async () => {
+    try {
+        if (hasKeytar) {
+            const t = await keytar.getPassword(KEYTAR_SERVICE, KEYTAR_ACCOUNT);
+            return t || null;
+        }
+        const s = loadSettings() || {};
+        return s.authToken || null;
+    } catch (e) {
+        console.error('auth:getToken error', e);
+        return null;
+    }
+});
+
+ipcMain.handle('auth:deleteToken', async () => {
+    try {
+        if (hasKeytar) {
+            await keytar.deletePassword(KEYTAR_SERVICE, KEYTAR_ACCOUNT);
+            return { ok: true };
+        }
+        const s = loadSettings() || {};
+        delete s.authToken;
+        saveSettings(s);
+        return { ok: true };
+    } catch (e) {
+        console.error('auth:deleteToken error', e);
+        return { ok: false, msg: 'Не удалось удалить токен.' };
+    }
+});
+
+// DevTools opener (allows renderer to request DevTools be opened when needed)
+ipcMain.handle('devtools:open', () => {
+    try {
+        if (mainWindow && mainWindow.webContents) {
+            mainWindow.webContents.openDevTools({ mode: 'undocked' });
+            return { ok: true };
+        }
+        return { ok: false, msg: 'Main window not available' };
+    } catch (e) {
+        return { ok: false, msg: String(e) };
+    }
+});
+
 ipcMain.handle('launcher:getSettings', () => {
     return loadSettings();
 });
@@ -580,6 +736,7 @@ ipcMain.handle('launcher:saveSettings', (_, payload) => {
     const maxRamGb = Number(payload?.maxRamGb ?? 6);
     const gameDir = payload?.gameDir || null;
     const autoCheckUpdates = payload?.autoCheckUpdates !== undefined ? !!payload.autoCheckUpdates : true;
+    const authStaySignedIn = payload?.authStaySignedIn !== undefined ? !!payload.authStaySignedIn : undefined;
     if (!Number.isFinite(maxRamGb)) {
         return { ok: false, msg: 'Некорректное значение RAM.' };
     }
@@ -590,6 +747,7 @@ ipcMain.handle('launcher:saveSettings', (_, payload) => {
     current.maxRamGb = maxRamGb;
     current.gameDir = gameDir;
     current.autoCheckUpdates = autoCheckUpdates;
+    if (authStaySignedIn !== undefined) current.authStaySignedIn = authStaySignedIn;
     saveSettings(current);
     return { ok: true, msg: 'Сохранено.' };
 });
@@ -735,9 +893,39 @@ ipcMain.handle('client:launch', async (_, payload) => {
             assembledRoot = installedCandidate;
             versionJsonPath = installedJson;
             versionJarPath = installedJar;
+        } else if (fs.existsSync(installedCandidate)) {
+            // installedCandidate exists but inner version folder may have a different id - try to detect
+            const versionsDir = path.join(installedCandidate, 'versions');
+            if (fs.existsSync(versionsDir)) {
+                const inner = fs.readdirSync(versionsDir, { withFileTypes: true }).filter(d => d.isDirectory()).map(d => d.name)[0];
+                if (inner) {
+                    const candJson = path.join(versionsDir, inner, `${inner}.json`);
+                    const candJar = path.join(versionsDir, inner, `${inner}.jar`);
+                    if (fs.existsSync(candJson) && fs.existsSync(candJar)) {
+                        assembledRoot = installedCandidate;
+                        versionJsonPath = candJson;
+                        versionJarPath = candJar;
+                    }
+                }
+            }
         }
     }
 
+    // If assembledRoot exists but does not contain files for the requested version, try to detect inner version in built-in path
+    if ((!fs.existsSync(versionJsonPath) || !fs.existsSync(versionJarPath)) && fs.existsSync(assembledRoot)) {
+        const versionsDir2 = path.join(assembledRoot, 'versions');
+        if (fs.existsSync(versionsDir2)) {
+            const inner2 = fs.readdirSync(versionsDir2, { withFileTypes: true }).filter(d => d.isDirectory()).map(d => d.name)[0];
+            if (inner2) {
+                const candJson2 = path.join(versionsDir2, inner2, `${inner2}.json`);
+                const candJar2 = path.join(versionsDir2, inner2, `${inner2}.jar`);
+                if (fs.existsSync(candJson2) && fs.existsSync(candJar2)) {
+                    versionJsonPath = candJson2;
+                    versionJarPath = candJar2;
+                }
+            }
+        }
+    }
 
 
     // If still missing, try to download the client release (latest release manifest)

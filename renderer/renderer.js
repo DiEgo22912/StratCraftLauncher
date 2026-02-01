@@ -39,13 +39,42 @@ const serverDot = document.getElementById('serverDot');
 const playAux = document.getElementById('playAux');
 let checkReleaseBtn = null;
 
+// Track operation state to prevent double-clicks
+let isOperationInProgress = false;
+
+function setButtonsDisabled(disabled) {
+    if (launchBtn) {
+        launchBtn.disabled = disabled;
+        if (disabled) {
+            launchBtn.classList.add('disabled');
+        } else {
+            launchBtn.classList.remove('disabled');
+        }
+    }
+    if (checkReleaseBtn) {
+        checkReleaseBtn.disabled = disabled;
+        if (disabled) {
+            checkReleaseBtn.classList.add('disabled');
+        } else {
+            checkReleaseBtn.classList.remove('disabled');
+        }
+    }
+}
+
 function showCheckReleaseButton() {
     if (!playAux) return;
     if (checkReleaseBtn) return; // already shown
     checkReleaseBtn = document.createElement('button');
     checkReleaseBtn.className = 'btn ghost';
     checkReleaseBtn.textContent = 'Проверить релиз';
+    if (isOperationInProgress) {
+        checkReleaseBtn.disabled = true;
+        checkReleaseBtn.classList.add('disabled');
+    }
     checkReleaseBtn.addEventListener('click', async () => {
+        if (isOperationInProgress) return;
+        isOperationInProgress = true;
+        setButtonsDisabled(true);
         setMainStatus('Проверка релиза…', true);
         try {
             const res = await window.clientUpdate.check();
@@ -59,6 +88,9 @@ function showCheckReleaseButton() {
             }
         } catch (e) {
             setMainStatus(`Ошибка проверки релиза: ${e?.message || e}`, false);
+        } finally {
+            isOperationInProgress = false;
+            setButtonsDisabled(false);
         }
     });
     playAux.appendChild(checkReleaseBtn);
@@ -549,6 +581,10 @@ async function setLaunchButtonToLaunch(preferredVersion) {
     launchBtn.textContent = 'Запустить';
     launchBtn.classList.remove('danger');
     launchBtn.onclick = async () => {
+        if (isOperationInProgress) return;
+        isOperationInProgress = true;
+        setButtonsDisabled(true);
+
         setMainStatus('Запуск клиента...', true);
         const targetHost = localAddress || serverHost;
         const address = serverPort ? `${targetHost}:${serverPort}` : targetHost;
@@ -571,48 +607,53 @@ async function setLaunchButtonToLaunch(preferredVersion) {
             serverAddress: address
         };
 
-        const res = await window.client.launch(payload);
-        if (res?.ok !== false) {
-            setMainStatus(res?.msg || 'Команда запуска отправлена.', true);
-            return;
-        }
-        const msg = String(res?.msg || '');
-        // If assembled client not found - attempt to download release first
-        if (msg.includes('Файлы собранного клиента не найдены')) {
-            setMainStatus('Файлы клиента не найдены — пробую скачать релиз с GitHub...', true);
-            try {
-                const chk = await window.clientUpdate.check();
-                if (chk?.ok && chk.manifest?.archive?.url) {
-                    setMainStatus('Скачиваю релиз клиента...', true);
-                    const d = await window.clientUpdate.download(chk.manifest.archive.url);
-                    if (d?.ok) {
-                        setMainStatus('Устанавливаю релиз...', true);
-                        const inst = await window.clientUpdate.install(d.path, chk.manifest.version || `client-${Date.now()}`);
-                        if (inst?.ok) {
-                            setMainStatus('Релиз установлен — пробую запустить...', true);
-                            // try launching the installed manifest version
-                            const res2 = await window.client.launch({ ...payload, version: chk.manifest.version });
-                            setMainStatus(res2?.msg || 'Команда запуска отправлена.', res2?.ok !== false);
-                            return;
+        try {
+            const res = await window.client.launch(payload);
+            if (res?.ok !== false) {
+                setMainStatus(res?.msg || 'Клиент запущен!', true);
+                return;
+            }
+            const msg = String(res?.msg || '');
+            // If assembled client not found - attempt to download release first
+            if (msg.includes('Файлы собранного клиента не найдены')) {
+                setMainStatus('Файлы клиента не найдены — скачиваю релиз...', true);
+                try {
+                    const chk = await window.clientUpdate.check();
+                    if (chk?.ok && chk.manifest?.archive?.url) {
+                        setMainStatus('Загрузка релиза клиента...', true);
+                        const d = await window.clientUpdate.download(chk.manifest.archive.url);
+                        if (d?.ok) {
+                            setMainStatus('Установка релиза...', true);
+                            const inst = await window.clientUpdate.install(d.path, chk.manifest.version || `client-${Date.now()}`);
+                            if (inst?.ok) {
+                                setMainStatus('Релиз установлен — запускаю...', true);
+                                // try launching the installed manifest version
+                                const res2 = await window.client.launch({ ...payload, version: chk.manifest.version });
+                                setMainStatus(res2?.msg || 'Клиент запущен!', res2?.ok !== false);
+                                return;
+                            } else {
+                                setMainStatus(`Ошибка установки: ${inst?.msg || 'неизвестно'}`, false);
+                            }
                         } else {
-                            setMainStatus(`Установка релиза не удалась: ${inst?.msg || 'неизвестно'}`, false);
+                            setMainStatus(`Ошибка загрузки: ${d?.msg || 'неизвестно'}`, false);
                         }
                     } else {
-                        setMainStatus(`Ошибка загрузки релиза: ${d?.msg || 'неизвестно'}`, false);
+                        setMainStatus('Релиз клиента не найден на GitHub.', false);
                     }
-                } else {
-                    setMainStatus('Релиз клиента не найден в GitHub.', false);
+                } catch (e) {
+                    setMainStatus(`Ошибка: ${e?.message || e}`, false);
                 }
-            } catch (e) {
-                setMainStatus(`Ошибка загрузки релиза: ${e?.message || e}`, false);
-            }
 
-            // Локальная сборка отключена — если релиз не доступен, сообщаем об ошибке
-            setMainStatus('Релиз клиента недоступен и локальная сборка отключена.', false);
-            return;
+                // Локальная сборка отключена — если релиз не доступен, сообщаем об ошибке
+                setMainStatus('Релиз клиента недоступен и локальная сборка отключена.', false);
+                return;
+            }
+            // Generic error
+            setMainStatus(res?.msg || 'Ошибка запуска', false);
+        } finally {
+            isOperationInProgress = false;
+            setButtonsDisabled(false);
         }
-        // Generic error
-        setMainStatus(res?.msg || 'Ошибка запуска', false);
     };
 }
 
@@ -620,6 +661,10 @@ async function setLaunchButtonToUpdate(manifest) {
     launchBtn.textContent = 'Обновить';
     launchBtn.classList.add('danger');
     launchBtn.onclick = async () => {
+        if (isOperationInProgress) return;
+        isOperationInProgress = true;
+        setButtonsDisabled(true);
+
         try {
             setMainStatus('Загрузка обновления...', true);
             const d = await window.clientUpdate.download(manifest.archive.url);
@@ -641,6 +686,9 @@ async function setLaunchButtonToUpdate(manifest) {
             }
         } catch (e) {
             setMainStatus(`Ошибка: ${e?.message || e}`, false);
+        } finally {
+            isOperationInProgress = false;
+            setButtonsDisabled(false);
         }
     };
 }

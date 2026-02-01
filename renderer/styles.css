@@ -412,6 +412,14 @@ input[type="range"] {
     background: #2b6bb3;
     font-weight: 600;
     cursor: pointer;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.btn.disabled,
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    pointer-events: none;
 }
 
 .green {
