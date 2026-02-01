@@ -274,6 +274,27 @@ header.in-main #appTitle.slide-in {
     transition: color 0.2s;
 }
 
+.auth-options {
+    display: flex;
+    gap: 14px;
+    align-items: center;
+    margin-top: 14px;
+    /* increased spacing from password field */
+    flex-wrap: wrap;
+}
+
+.auth-option {
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* make checkbox + label vertically aligned with inputs */
+.checkbox input[type="checkbox"] {
+    margin-top: 0;
+}
+
 .checkbox:hover {
     color: #b8c1cf;
 }
@@ -902,6 +923,14 @@ input[type="range"] {
     align-items: center;
     justify-content: center;
     z-index: 1100;
+    /* Allow interaction while the animation plays */
+    pointer-events: none;
+}
+
+/* If you want the transition to capture clicks (e.g., click-to-skip), add the class 'skipable' which re-enables pointer events */
+.transition.skipable {
+    pointer-events: auto;
+    cursor: pointer;
 }
 
 .transition.hidden {

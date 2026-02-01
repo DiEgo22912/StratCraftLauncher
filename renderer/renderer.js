@@ -2,6 +2,7 @@ const status = document.getElementById('status');
 const username = document.getElementById('username');
 const password = document.getElementById('password');
 const rememberMe = document.getElementById('rememberMe');
+const staySignedIn = document.getElementById('staySignedIn');
 const registerModal = document.getElementById('registerModal');
 const regUsername = document.getElementById('regUsername');
 const regPassword = document.getElementById('regPassword');
@@ -35,6 +36,39 @@ const updateProgress = document.getElementById('updateProgress');
 const updateEta = document.getElementById('updateEta');
 const autoCheckUpdatesCheckbox = document.getElementById('autoCheckUpdates');
 const serverDot = document.getElementById('serverDot');
+const playAux = document.getElementById('playAux');
+let checkReleaseBtn = null;
+
+function showCheckReleaseButton() {
+    if (!playAux) return;
+    if (checkReleaseBtn) return; // already shown
+    checkReleaseBtn = document.createElement('button');
+    checkReleaseBtn.className = 'btn ghost';
+    checkReleaseBtn.textContent = 'Проверить релиз';
+    checkReleaseBtn.addEventListener('click', async () => {
+        setMainStatus('Проверка релиза…', true);
+        try {
+            const res = await window.clientUpdate.check();
+            if (res?.ok && res.manifest) {
+                setMainStatus('Релиз найден. Нажмите Обновить.', true);
+                setLaunchButtonToUpdate(res.manifest);
+            } else if (res?.ok && !res.manifest) {
+                setMainStatus('Релиз не содержит манифеста client-manifest.json.', false);
+            } else {
+                setMainStatus(`Ошибка проверки релиза: ${res?.msg || 'неизвестно'}`, false);
+            }
+        } catch (e) {
+            setMainStatus(`Ошибка проверки релиза: ${e?.message || e}`, false);
+        }
+    });
+    playAux.appendChild(checkReleaseBtn);
+}
+
+function hideCheckReleaseButton() {
+    if (!playAux || !checkReleaseBtn) return;
+    try { playAux.removeChild(checkReleaseBtn); } catch (e) { }
+    checkReleaseBtn = null;
+}
 
 // Launcher update modal elements
 const launcherUpdateModal = document.getElementById('launcherUpdateModal');
@@ -140,6 +174,12 @@ async function loadSettings() {
     maxRam.value = String(maxVal);
     ramInput.value = String(maxVal);
 
+    // auth UI: restore staySignedIn setting
+    try {
+        if (typeof staySignedIn !== 'undefined' && staySignedIn !== null) {
+            staySignedIn.checked = !!settings?.authStaySignedIn;
+        }
+    } catch (e) { }
 
     if (autoCheckUpdatesCheckbox) {
         autoCheckUpdatesCheckbox.checked = settings?.autoCheckUpdates !== false;
@@ -147,6 +187,42 @@ async function loadSettings() {
     if (updateProgress) {
         updateProgress.style.display = 'none';
         updateProgress.value = 0;
+    }
+
+    // Attempt to restore session if user chose to stay signed in
+    try {
+        // Prevent recursion: only attempt restore if mainView is hidden (we're still on auth screen)
+        if (settings?.authStaySignedIn && mainView && mainView.classList.contains('hidden')) {
+            const token = await window.auth.getToken();
+            if (token) {
+                // verify token and restore session
+                const apiUrl = window.auth.getApiUrl?.();
+                if (apiUrl) {
+                    const res = await fetch(`${apiUrl}/api/me`, { headers: { Authorization: `Bearer ${token}` } });
+                    const json = await res.json();
+                    if (json?.ok && json.username) {
+                        // show logged-in UI
+                        playTransition(json.username);
+                        setStatus(`Восстановлен сеанс: ${json.username}`, true);
+                    }
+                }
+            }
+        }
+    } catch (e) {
+        console.error('restore session error', e);
+    }
+}
+
+async function saveStaySignedInPreference(value, options = {}) {
+    const { clearTokenIfFalse = false } = options;
+    try {
+        const current = await window.launcher.getSettings();
+        await window.launcher.saveSettings({ ...(current || {}), authStaySignedIn: !!value });
+    } catch (e) {
+        console.warn('Failed to save authStaySignedIn setting', e);
+    }
+    if (!value && clearTokenIfFalse) {
+        try { window.auth?.deleteToken?.(); } catch (e) { }
     }
 }
 
@@ -162,36 +238,22 @@ async function login() {
         } else {
             localStorage.removeItem('launcherUser');
         }
+        // persist stay-signed-in preference in launcher settings
+        await saveStaySignedInPreference(!!staySignedIn?.checked);
+        // Persist token only if user elected to stay signed in; otherwise ensure any stored token is removed
+        try {
+            if (staySignedIn?.checked && res?.token) {
+                await window.auth.saveToken(res.token);
+            } else {
+                // ensure we don't keep token around
+                await window.auth.deleteToken();
+            }
+        } catch (e) { console.warn('Token persistence change failed', e); }
         playTransition(res.username || username.value.trim());
     }
 }
 
-function playTransition(userName) {
-    transition.classList.remove('hidden');
-    setTimeout(() => {
-        transition.classList.add('hidden');
-        authView.classList.add('hidden');
-        mainView.classList.remove('hidden');
-        profileBtn.classList.remove('hidden');
-        profileName.textContent = userName || '—';
-        header.classList.add('in-main');
-        if (!mainView.contains(header)) {
-            mainView.insertBefore(header, mainView.firstChild);
-        }
-        appTitle.classList.remove('slide-in');
-        if (mainActions) {
-            mainActions.classList.remove('show');
-        }
-        requestAnimationFrame(() => {
-            appTitle.classList.add('slide-in');
-            if (mainActions) {
-                setTimeout(() => mainActions.classList.add('show'), 400);
-            }
-        });
-        loadSettings();
-        startServerPolling();
-    }, 1200);
-}
+// playTransition is implemented later to perform a non-blocking UI reveal on login
 
 async function refreshServerStatus() {
     if (!window.launcher?.getServerStatus) return;
@@ -252,23 +314,53 @@ async function register() {
         registerStatus.classList.remove('success');
         return;
     }
-    const res = await window.auth.register({
-        username: user,
-        password: pass
-    });
-    registerStatus.textContent = res.msg;
-    registerStatus.style.color = res.ok ? '#7ddc8a' : '#ff7b7b';
-    registerStatus.classList.toggle('success', !!res.ok);
-    if (res.ok) {
-        registerModal.classList.add('pulse');
-        setTimeout(() => {
-            registerModal.classList.remove('pulse');
-            registerModal.classList.add('hidden');
-            registerModal.classList.remove('show');
-            username.value = user;
-            password.value = '';
-            setStatus('Аккаунт создан. Войдите.', true);
-        }, 450);
+
+    // Visual feedback
+    registerStatus.textContent = 'Создаём аккаунт...';
+    registerStatus.style.color = '#9aa4b2';
+    registerStatus.classList.remove('success');
+    const btn = document.getElementById('registerConfirmBtn');
+    if (btn) btn.disabled = true;
+
+    try {
+        const res = await window.auth.register({ username: user, password: pass });
+        console.log('register() response:', res);
+        registerStatus.textContent = res?.msg || 'Неизвестный ответ.';
+        registerStatus.style.color = res?.ok ? '#7ddc8a' : '#ff7b7b';
+        registerStatus.classList.toggle('success', !!res?.ok);
+        if (res?.ok) {
+            // Close modal and attempt auto-login (remote will provide token, local fallback logs in locally)
+            registerModal.classList.add('pulse');
+            setTimeout(async () => {
+                registerModal.classList.remove('pulse');
+                registerModal.classList.add('hidden');
+                registerModal.classList.remove('show');
+                username.value = user;
+                password.value = '';
+                setStatus('Аккаунт создан. Выполняем вход…', true);
+                try {
+                    const loginRes = await window.auth.login({ username: user, password: pass });
+                    console.log('auto-login after register:', loginRes);
+                    if (loginRes?.ok) {
+                        // show logged-in UI
+                        playTransition(loginRes.username || user);
+                        setStatus(`Добро пожаловать, ${loginRes.username || user}!`, true);
+                    } else {
+                        setStatus(loginRes?.msg || 'Не удалось войти автоматически.', false);
+                    }
+                } catch (e) {
+                    console.error('auto-login error', e);
+                    setStatus('Ошибка при автоматическом входе.', false);
+                }
+            }, 450);
+        }
+    } catch (e) {
+        console.error('register() error', e);
+        registerStatus.textContent = `Ошибка: ${e?.message || e}`;
+        registerStatus.style.color = '#ff7b7b';
+        registerStatus.classList.remove('success');
+    } finally {
+        if (btn) btn.disabled = false;
     }
 }
 
@@ -298,6 +390,23 @@ regPassword2.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') register();
 });
 
+// Global shortcut to open DevTools: Ctrl+Shift+I (or Cmd+Opt+I on mac)
+document.addEventListener('keydown', (e) => {
+    const isMac = navigator.platform.toLowerCase().includes('mac');
+    const openHotkey = isMac ? (e.metaKey && e.altKey && (e.key === 'I' || e.key === 'i')) : (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'i'));
+    if (openHotkey) {
+        try {
+            if (window.devtools && window.devtools.open) {
+                window.devtools.open();
+            } else {
+                console.warn('DevTools API not available');
+            }
+        } catch (err) {
+            console.error('Failed to open DevTools', err);
+        }
+    }
+});
+
 profileBtn.addEventListener('click', () => {
     profileDrawer.classList.remove('hidden');
     requestAnimationFrame(() => profileDrawer.classList.add('show'));
@@ -309,7 +418,66 @@ profileDrawer.addEventListener('click', (e) => {
         setTimeout(() => profileDrawer.classList.add('hidden'), 200);
     }
 });
+// --- Auth check helper
+async function checkAuth() {
+    const statusEl = document.getElementById('authCheckStatus');
+    try {
+        const token = await window.auth.getToken();
+        // If no token but there is a username in profile, assume local auth
+        const currentUser = profileName?.textContent && profileName.textContent !== '—' ? profileName.textContent : null;
+        if (!token) {
+            if (currentUser) {
+                statusEl.textContent = `Локальная авторизация: ${currentUser}`;
+                statusEl.style.color = '#7ddc8a';
+                return;
+            }
+            statusEl.textContent = 'Токен не найден. Выполните вход.';
+            statusEl.style.color = '#ff7b7b';
+            return;
+        }
+        const apiUrl = window.auth.getApiUrl?.();
+        if (!apiUrl) {
+            statusEl.textContent = 'Remote API URL не настроен.';
+            statusEl.style.color = '#ff7b7b';
+            return;
+        }
+        statusEl.textContent = 'Проверка авторизации…';
+        statusEl.style.color = '#9aa4b2';
+        const res = await fetch(`${apiUrl}/api/me`, { headers: { Authorization: `Bearer ${token}` } });
+        const json = await res.json();
+        console.log('checkAuth result', json);
+        if (json?.ok) {
+            statusEl.textContent = `Авторизован: ${json.username}`;
+            statusEl.style.color = '#7ddc8a';
+        } else {
+            statusEl.textContent = `Не авторизован: ${json?.msg || res.status}`;
+            statusEl.style.color = '#ff7b7b';
+        }
+    } catch (e) {
+        console.error('checkAuth error', e);
+        statusEl.textContent = `Ошибка проверки: ${e?.message || e}`;
+        statusEl.style.color = '#ff7b7b';
+    }
+}
 
+// Wire profile buttons
+const checkAuthBtn = document.getElementById('checkAuthBtn');
+const authCheckStatus = document.getElementById('authCheckStatus');
+if (checkAuthBtn) checkAuthBtn.addEventListener('click', checkAuth);
+if (logoutBtn) logoutBtn.addEventListener('click', () => {
+    // clear saved token and show auth view
+    // delete token (keytar or settings) and update UI
+    (async () => {
+        try { await window.auth.deleteToken(); } catch (e) { /* ignore */ }
+        try { const cur = await window.launcher.getSettings(); await window.launcher.saveSettings({ ...(cur || {}), authToken: null, authStaySignedIn: false }); } catch (e) { /* ignore */ }
+    })();
+    profileDrawer.classList.remove('show');
+    setTimeout(() => profileDrawer.classList.add('hidden'), 160);
+    authView.classList.remove('hidden');
+    mainView.classList.add('hidden');
+    profileBtn.classList.add('hidden');
+    setStatus('Выход выполнен.', true);
+});
 logoutBtn.addEventListener('click', () => {
     profileDrawer.classList.remove('show');
     setTimeout(() => profileDrawer.classList.add('hidden'), 200);
@@ -319,6 +487,10 @@ logoutBtn.addEventListener('click', () => {
         if (rememberMe.checked && username.value.trim()) localStorage.setItem('launcherUser', username.value.trim());
         else localStorage.removeItem('launcherUser');
     } catch (e) { }
+    (async () => {
+        try { await window.auth.deleteToken(); } catch (e) { }
+        try { const cur = await window.launcher.getSettings(); await window.launcher.saveSettings({ ...(cur || {}), authToken: null, authStaySignedIn: false }); } catch (e) { }
+    })();
     authView.classList.remove('hidden');
     mainView.classList.add('hidden');
     profileBtn.classList.add('hidden');
@@ -340,6 +512,12 @@ if (settingsBtn) {
         } catch {
             console.error('Не удалось загрузить настройки');
         }
+    });
+}
+
+if (staySignedIn) {
+    staySignedIn.addEventListener('change', () => {
+        saveStaySignedInPreference(!!staySignedIn.checked, { clearTokenIfFalse: !staySignedIn.checked });
     });
 }
 
@@ -366,25 +544,40 @@ saveSettingsBtn.addEventListener('click', async () => {
 });
 
 // Unified launch/update button behavior
-async function setLaunchButtonToLaunch() {
+async function setLaunchButtonToLaunch(preferredVersion) {
+    // preferredVersion: optional string (installed meta.version or name)
     launchBtn.textContent = 'Запустить';
     launchBtn.classList.remove('danger');
     launchBtn.onclick = async () => {
         setMainStatus('Запуск клиента...', true);
         const targetHost = localAddress || serverHost;
         const address = serverPort ? `${targetHost}:${serverPort}` : targetHost;
+        // choose version: prefer provided, else try to pick an installed client
+        let versionToUse = preferredVersion;
+        try {
+            if (!versionToUse && window.client?.installed) {
+                const listRes = await window.client.installed();
+                const clients = (listRes?.ok !== false) ? listRes.clients || [] : [];
+                if (clients.length > 0) {
+                    versionToUse = clients[0].meta?.version || clients[0].name;
+                }
+            }
+        } catch (e) { }
+        if (!versionToUse) versionToUse = '1.20.1-forge-47.4.16'; // fallback
+
         const payload = {
-            version: '1.20.1-forge-47.4.16',
+            version: versionToUse,
             username: username.value.trim(),
             serverAddress: address
         };
+
         const res = await window.client.launch(payload);
         if (res?.ok !== false) {
             setMainStatus(res?.msg || 'Команда запуска отправлена.', true);
             return;
         }
         const msg = String(res?.msg || '');
-        // If assembled client not found - attempt to download release first, then assemble as fallback
+        // If assembled client not found - attempt to download release first
         if (msg.includes('Файлы собранного клиента не найдены')) {
             setMainStatus('Файлы клиента не найдены — пробую скачать релиз с GitHub...', true);
             try {
@@ -397,7 +590,8 @@ async function setLaunchButtonToLaunch() {
                         const inst = await window.clientUpdate.install(d.path, chk.manifest.version || `client-${Date.now()}`);
                         if (inst?.ok) {
                             setMainStatus('Релиз установлен — пробую запустить...', true);
-                            const res2 = await window.client.launch(payload);
+                            // try launching the installed manifest version
+                            const res2 = await window.client.launch({ ...payload, version: chk.manifest.version });
                             setMainStatus(res2?.msg || 'Команда запуска отправлена.', res2?.ok !== false);
                             return;
                         } else {
@@ -464,14 +658,27 @@ async function checkClientUpdateAndApplyUI() {
             const installedNames = installed.map(x => x.meta?.version || x.name);
             if (!installedNames.includes(manifest.version)) {
                 // update available
+                hideCheckReleaseButton();
                 setLaunchButtonToUpdate(manifest);
                 const remoteEl = document.getElementById('clientRemoteVersion');
                 if (remoteEl) remoteEl.textContent = manifest.version || '—';
                 return;
             }
+        } else if (res?.ok === false) {
+            // explicit error from check
+            setMainStatus(`Ошибка получения релиза: ${res.msg || 'неизвестно'}`, false);
+            showCheckReleaseButton();
+            return;
+        } else {
+            // no manifest found
+            setMainStatus('Релиз клиента недоступен и локальная сборка отключена.', false);
+            showCheckReleaseButton();
+            return;
         }
         // no update
-        setLaunchButtonToLaunch();
+        // prefer an installed client version if present
+        const preferred = (installed && installed.length > 0) ? (installed[0].meta?.detectedVersion || installed[0].meta?.version || installed[0].name) : undefined;
+        setLaunchButtonToLaunch(preferred);
         const remoteEl = document.getElementById('clientRemoteVersion');
         if (remoteEl) remoteEl.textContent = '—';
     } catch (e) {
@@ -482,33 +689,36 @@ async function checkClientUpdateAndApplyUI() {
 
 // call check on login transition
 function playTransition(userName) {
+    // Show a non-blocking transition overlay while revealing the main UI immediately
     transition.classList.remove('hidden');
-    setTimeout(() => {
-        transition.classList.add('hidden');
-        authView.classList.add('hidden');
-        mainView.classList.remove('hidden');
-        profileBtn.classList.remove('hidden');
-        profileName.textContent = userName || '—';
-        header.classList.add('in-main');
-        if (!mainView.contains(header)) {
-            mainView.insertBefore(header, mainView.firstChild);
-        }
-        appTitle.classList.remove('slide-in');
-        if (mainActions) {
-            mainActions.classList.remove('show');
-        }
-        requestAnimationFrame(() => {
-            appTitle.classList.add('slide-in');
-            if (mainActions) {
-                setTimeout(() => mainActions.classList.add('show'), 400);
-            }
-        });
-        loadSettings();
-        startServerPolling();
-        checkClientUpdateAndApplyUI();
-        // also check launcher updates and show modal if available
-        try { checkLauncherUpdateAndShowModal(); } catch (e) { }
-    }, 1200);
+
+    // Reveal the main UI right away so the user can interact while animation plays
+    authView.classList.add('hidden');
+    mainView.classList.remove('hidden');
+    profileBtn.classList.remove('hidden');
+    profileName.textContent = userName || '—';
+    header.classList.add('in-main');
+    if (!mainView.contains(header)) {
+        mainView.insertBefore(header, mainView.firstChild);
+    }
+
+    // Prepare title and main actions animation (make actions appear shortly)
+    appTitle.classList.remove('slide-in');
+    if (mainActions) {
+        mainActions.classList.remove('show');
+        setTimeout(() => mainActions.classList.add('show'), 400);
+    }
+    requestAnimationFrame(() => appTitle.classList.add('slide-in'));
+
+    // Start polling immediately (settings were loaded on startup)
+    startServerPolling();
+
+    // Start checks for client/launcher updates immediately
+    try { checkClientUpdateAndApplyUI(); } catch (e) { console.warn('checkClientUpdate failed', e); }
+    try { checkLauncherUpdateAndShowModal(); } catch (e) { /* non-critical */ }
+
+    // Hide the visual overlay after the intro animation finishes
+    setTimeout(() => transition.classList.add('hidden'), 1200);
 }
 
 // Persist username on window close if remember is checked (handles closing immediately after login)
@@ -517,6 +727,9 @@ try {
         try {
             if (rememberMe?.checked && username?.value && username.value.trim()) {
                 localStorage.setItem('launcherUser', username.value.trim());
+            }
+            if (!staySignedIn?.checked) {
+                try { window.auth?.deleteToken?.(); } catch (e) { }
             }
         } catch (e) { }
     });
@@ -549,6 +762,12 @@ if (window.clientUpdate?.onEvent) {
             if (ev?.type === 'installed') {
                 setMainStatus(`Установлена версия ${ev.version}`, true);
                 try { window.client.installed().then(r => { /* can update UI if needed */ }); } catch (e) { }
+                // refresh UI to pick up installed version
+                try { checkClientUpdateAndApplyUI(); } catch (e) { }
+            } else if (ev?.type === 'download-failed') {
+                setMainStatus(`Ошибка загрузки релиза: ${ev.msg || 'неизвестно'}`, false);
+            } else if (ev?.type === 'install-failed') {
+                setMainStatus(`Ошибка установки релиза: ${ev.msg || 'неизвестно'}`, false);
             }
         } catch (e) { }
     });
@@ -556,13 +775,16 @@ if (window.clientUpdate?.onEvent) {
 
 setStatus('Введите ник и пароль.');
 // Default single launch button behavior (may be overwritten later by update check)
-try { setLaunchButtonToLaunch(); } catch (e) { /* client API may not be ready yet */ }
+try { (async () => { const list = await window.client?.installed?.(); const preferred = (list?.ok !== false && list.clients?.length > 0) ? (list.clients[0].meta?.detectedVersion || list.clients[0].meta?.version || list.clients[0].name) : undefined; setLaunchButtonToLaunch(preferred); })(); } catch (e) { /* client API may not be ready yet */ }
 
 // Initial state
 authView.classList.remove('hidden');
 mainView.classList.add('hidden');
 profileBtn.classList.add('hidden');
 transition.classList.add('hidden');
+
+// Load settings once at startup (handles stay-signed-in restore when enabled)
+try { loadSettings(); } catch (e) { console.error('Initial settings load failed', e); }
 
 // Basic remember-me behavior: restore username if previously saved; no settings toggle
 const remembered = localStorage.getItem('launcherUser');
@@ -578,24 +800,37 @@ function initAnimations() {
     const settingsAnim = document.getElementById('settingsAnim');
     const basePath = '../Animations';
     if (settingsAnim) {
-        const anim = window.lottie.loadAnimation({
-            container: settingsAnim,
-            renderer: 'svg',
-            loop: false,
-            autoplay: false,
-            path: `${basePath}/settingsV2.json`
-        });
-        anim.goToAndStop(0, true);
-        if (settingsBtn) {
-            settingsBtn.addEventListener('mouseenter', () => {
-                anim.stop();
-                anim.play();
-            });
-            settingsBtn.addEventListener('mouseleave', () => {
-                anim.stop();
+        // Avoid noisy console error if animation file missing
+        (async () => {
+            try {
+                const pathUrl = `${basePath}/settingsV2.json`;
+                const res = await fetch(pathUrl, { method: 'GET' });
+                if (!res.ok) {
+                    console.warn('Animation file not found:', pathUrl, res.status);
+                    return;
+                }
+                const anim = window.lottie.loadAnimation({
+                    container: settingsAnim,
+                    renderer: 'svg',
+                    loop: false,
+                    autoplay: false,
+                    path: pathUrl
+                });
                 anim.goToAndStop(0, true);
-            });
-        }
+                if (settingsBtn) {
+                    settingsBtn.addEventListener('mouseenter', () => {
+                        anim.stop();
+                        anim.play();
+                    });
+                    settingsBtn.addEventListener('mouseleave', () => {
+                        anim.stop();
+                        anim.goToAndStop(0, true);
+                    });
+                }
+            } catch (e) {
+                console.warn('Failed to load animation', e);
+            }
+        })();
     }
 }
 

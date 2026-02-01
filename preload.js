@@ -1,8 +1,52 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+const AUTH_API_URL = 'https://garrulously-tangible-crayfish.cloudpub.ru';
+
+async function callRemoteApi(path, payload) {
+    try {
+        const url = `${AUTH_API_URL}${path}`;
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        let text = await res.text();
+        try { text = text ? JSON.parse(text) : null; } catch (e) { /* leave as text */ }
+        console.log('callRemoteApi', { url, status: res.status, body: text });
+        if (!res.ok) return { ok: false, msg: (text && text.msg) ? text.msg : `HTTP ${res.status}` };
+        return text;
+    } catch (e) {
+        console.error('callRemoteApi error', e);
+        return { ok: false, msg: 'Сеть недоступна.' };
+    }
+}
+
 contextBridge.exposeInMainWorld('auth', {
-    register: (payload) => ipcRenderer.invoke('auth:register', payload),
-    login: (payload) => ipcRenderer.invoke('auth:login', payload)
+    register: async (payload) => {
+        const r = await callRemoteApi('/api/register', payload);
+        // Do not persist token automatically here; renderer decides whether to save based on user's choice
+        if (r && r.ok) {
+            return r;
+        }
+        // fallback to local handler
+        try { return await ipcRenderer.invoke('auth:register', payload); } catch (e) { return r; }
+    },
+    login: async (payload) => {
+        const r = await callRemoteApi('/api/login', payload);
+        // Do not persist token automatically here; renderer decides whether to save based on user's choice
+        if (r && r.ok) {
+            return r;
+        }
+        try { return await ipcRenderer.invoke('auth:login', payload); } catch (e) { return r; }
+    },
+    getToken: () => ipcRenderer.invoke('auth:getToken'),
+    saveToken: (token) => ipcRenderer.invoke('auth:saveToken', token),
+    deleteToken: () => ipcRenderer.invoke('auth:deleteToken'),
+    getApiUrl: () => AUTH_API_URL
+});
+
+contextBridge.exposeInMainWorld('devtools', {
+    open: () => ipcRenderer.invoke('devtools:open')
 });
 
 contextBridge.exposeInMainWorld('launcher', {
