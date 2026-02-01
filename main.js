@@ -9,10 +9,16 @@ const { autoUpdater } = require('electron-updater');
 
 let mainWindow = null;
 
-const DATA_DIR = path.join(__dirname, 'data');
+// Use userData for writable data (works both in dev and packaged mode)
+// In packaged mode, __dirname points inside app.asar (read-only)
+// app.getPath('userData') points to %APPDATA%/StratCraftLauncher (writable)
+const USER_DATA_DIR = app.getPath('userData');
+const DATA_DIR = path.join(USER_DATA_DIR, 'data');
 const USERS_PATH = path.join(DATA_DIR, 'users.json');
 const SETTINGS_PATH = path.join(DATA_DIR, 'launcher-settings.json');
-const GAME_DIR = path.join(__dirname, 'StratCraftClient');
+
+// Game/client files also need to be in writable location
+const GAME_DIR = path.join(USER_DATA_DIR, 'StratCraftClient');
 const INSTANCE_DIR = GAME_DIR;
 const INSTANCE_JAR = path.join(GAME_DIR, 'StratCraft 1.24.1.jar');
 const INSTANCE_JSON = path.join(GAME_DIR, 'StratCraft 1.24.1.json');
@@ -888,7 +894,7 @@ ipcMain.handle('client:assemble', async (_, opts) => {
 });
 
 ipcMain.handle('client:list', async () => {
-    const root = path.join(__dirname, 'StratCraftClient', 'client-files');
+    const root = path.join(USER_DATA_DIR, 'StratCraftClient', 'client-files');
     if (!fs.existsSync(root)) return { ok: true, versions: [] };
     const entries = fs.readdirSync(root, { withFileTypes: true }).filter(d => d.isDirectory()).map(d => d.name);
     return { ok: true, versions: entries };
@@ -902,13 +908,13 @@ ipcMain.handle('client:launch', async (_, payload) => {
     // 1) Built-in assembled copy under StratCraftClient/client-files/<version>
     // 2) Installed clients under DATA_DIR/clients/<version>
     // 3) Attempt to download & install client release from GitHub
-    let assembledRoot = path.join(__dirname, 'StratCraftClient', 'client-files', versionId);
+    let assembledRoot = path.join(USER_DATA_DIR, 'StratCraftClient', 'client-files', versionId);
     let versionJsonPath = path.join(assembledRoot, 'versions', versionId, `${versionId}.json`);
     let versionJarPath = path.join(assembledRoot, 'versions', versionId, `${versionId}.jar`);
     let actualVersionId = versionId;
 
     const installedCandidate = path.join(DATA_DIR, 'clients', versionId);
-    
+
     // Helper function to find version files in a directory
     const findVersionFiles = (rootDir) => {
         try {
@@ -969,19 +975,19 @@ ipcMain.handle('client:launch', async (_, payload) => {
                 if (!fs.existsSync(downloadsDir)) fs.mkdirSync(downloadsDir, { recursive: true });
                 const dest = path.join(downloadsDir, fileName);
                 await downloadFile(manifest.archive.url, dest, (p) => { });
-                
+
                 // Install to DATA_DIR/clients/<manifest.version>
                 const clientsRoot = path.join(DATA_DIR, 'clients');
                 if (!fs.existsSync(clientsRoot)) fs.mkdirSync(clientsRoot, { recursive: true });
                 const tmp = path.join(clientsRoot, `${manifest.version}.tmp`);
                 const final = path.join(clientsRoot, manifest.version);
-                
+
                 try { if (fs.existsSync(tmp)) fs.rmSync(tmp, { recursive: true, force: true }); } catch (e) { }
                 await extractZip(dest, tmp);
                 if (fs.existsSync(final)) fs.rmSync(final, { recursive: true, force: true });
                 fs.renameSync(tmp, final);
                 fs.writeFileSync(path.join(final, 'installed.json'), JSON.stringify({ installed: new Date().toISOString(), version: manifest.version }, null, 2), 'utf8');
-                
+
                 assembledRoot = final;
                 const found = findVersionFiles(final);
                 if (found) {
@@ -1002,7 +1008,7 @@ ipcMain.handle('client:launch', async (_, payload) => {
     if (!fs.existsSync(versionJsonPath) || !fs.existsSync(versionJarPath)) {
         return { ok: false, msg: 'Файлы собранного клиента не найдены. Пожалуйста, убедитесь, что релиз клиента доступен в GitHub Releases.' };
     }
-    
+
     const version = readJson(versionJsonPath);
     if (!version) return { ok: false, msg: 'Failed to read version json' };
 
@@ -1027,9 +1033,9 @@ ipcMain.handle('client:launch', async (_, payload) => {
     const { classpath, missing } = buildClasspath(version, versionJarPath, mcDir);
     if (missing.length > 0) return { ok: false, msg: `Missing libraries: ${missing.join(', ')}` };
 
-    const instanceDir = path.join(__dirname, 'StratCraftClient', 'instances', actualVersionId);
+    const instanceDir = path.join(USER_DATA_DIR, 'StratCraftClient', 'instances', actualVersionId);
     const nativesDir = path.join(instanceDir, 'natives');
-    
+
     const vars = {
         auth_player_name: username,
         version_name: version.id || actualVersionId,
@@ -1068,7 +1074,7 @@ ipcMain.handle('client:launch', async (_, payload) => {
     try {
         if (!fs.existsSync(instanceDir)) fs.mkdirSync(instanceDir, { recursive: true });
         if (!fs.existsSync(nativesDir)) fs.mkdirSync(nativesDir, { recursive: true });
-    } catch (e) { 
+    } catch (e) {
         console.error('[Client Launch] Failed to create instance directories:', e);
     }
 
