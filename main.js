@@ -572,24 +572,48 @@ app.whenReady().then(() => {
             const tmp = path.join(clientsRoot, `${version}.tmp`);
             const final = path.join(clientsRoot, version);
             if (fs.existsSync(tmp)) fs.rmSync(tmp, { recursive: true, force: true });
+
+            // Extract to temp directory
             await extractZip(zipPath, tmp);
-            // atomically replace
-            if (fs.existsSync(final)) fs.rmSync(final, { recursive: true, force: true });
-            fs.renameSync(tmp, final);
-            // write metadata and detect inner version id if possible
+
+            // Detect actual version ID from extracted structure
             let detectedVersion = version;
             try {
-                const versionsDir = path.join(final, 'versions');
+                const versionsDir = path.join(tmp, 'versions');
                 if (fs.existsSync(versionsDir)) {
-                    const inner = fs.readdirSync(versionsDir, { withFileTypes: true }).filter(d => d.isDirectory()).map(d => d.name)[0];
-                    if (inner) detectedVersion = inner;
+                    const dirs = fs.readdirSync(versionsDir, { withFileTypes: true })
+                        .filter(d => d.isDirectory())
+                        .map(d => d.name);
+                    if (dirs.length > 0) {
+                        detectedVersion = dirs[0];
+                        console.log('[Client Update] Detected inner version:', detectedVersion);
+                    }
                 }
-            } catch (e) { }
-            const meta = { installed: new Date().toISOString(), version, detectedVersion };
+            } catch (e) {
+                console.error('[Client Update] Failed to detect version:', e);
+            }
+
+            // Atomically replace
+            if (fs.existsSync(final)) {
+                try {
+                    fs.rmSync(final, { recursive: true, force: true });
+                } catch (e) {
+                    console.error('[Client Update] Failed to remove old version:', e);
+                }
+            }
+            fs.renameSync(tmp, final);
+
+            // Write metadata
+            const meta = {
+                installed: new Date().toISOString(),
+                version,
+                detectedVersion
+            };
             fs.writeFileSync(path.join(final, 'installed.json'), JSON.stringify(meta, null, 2), 'utf8');
             mainWindow?.webContents?.send('client:update:event', { type: 'installed', version: detectedVersion });
-            return { ok: true };
+            return { ok: true, detectedVersion };
         } catch (err) {
+            console.error('[Client Update] Install error:', err);
             try { mainWindow?.webContents?.send('client:update:event', { type: 'install-failed', msg: err?.message || String(err) }); } catch (e) { }
             return { ok: false, msg: err?.message || String(err) };
         }
@@ -877,60 +901,67 @@ ipcMain.handle('client:launch', async (_, payload) => {
     // Try multiple locations/fallbacks for assembled client:
     // 1) Built-in assembled copy under StratCraftClient/client-files/<version>
     // 2) Installed clients under DATA_DIR/clients/<version>
-    // 3) Attempt to assemble automatically from local .minecraft
-    // 4) Attempt to download & install client release from GitHub
+    // 3) Attempt to download & install client release from GitHub
     let assembledRoot = path.join(__dirname, 'StratCraftClient', 'client-files', versionId);
     let versionJsonPath = path.join(assembledRoot, 'versions', versionId, `${versionId}.json`);
     let versionJarPath = path.join(assembledRoot, 'versions', versionId, `${versionId}.jar`);
+    let actualVersionId = versionId;
 
     const installedCandidate = path.join(DATA_DIR, 'clients', versionId);
-    const installedJson = path.join(installedCandidate, 'versions', versionId, `${versionId}.json`);
-    const installedJar = path.join(installedCandidate, 'versions', versionId, `${versionId}.jar`);
-
-    // If not present in built-in path, check installed clients
-    if (!fs.existsSync(versionJsonPath) || !fs.existsSync(versionJarPath)) {
-        if (fs.existsSync(installedJson) && fs.existsSync(installedJar)) {
-            assembledRoot = installedCandidate;
-            versionJsonPath = installedJson;
-            versionJarPath = installedJar;
-        } else if (fs.existsSync(installedCandidate)) {
-            // installedCandidate exists but inner version folder may have a different id - try to detect
-            const versionsDir = path.join(installedCandidate, 'versions');
+    
+    // Helper function to find version files in a directory
+    const findVersionFiles = (rootDir) => {
+        try {
+            const versionsDir = path.join(rootDir, 'versions');
             if (fs.existsSync(versionsDir)) {
-                const inner = fs.readdirSync(versionsDir, { withFileTypes: true }).filter(d => d.isDirectory()).map(d => d.name)[0];
-                if (inner) {
-                    const candJson = path.join(versionsDir, inner, `${inner}.json`);
-                    const candJar = path.join(versionsDir, inner, `${inner}.jar`);
+                const dirs = fs.readdirSync(versionsDir, { withFileTypes: true })
+                    .filter(d => d.isDirectory())
+                    .map(d => d.name);
+                for (const innerVer of dirs) {
+                    const candJson = path.join(versionsDir, innerVer, `${innerVer}.json`);
+                    const candJar = path.join(versionsDir, innerVer, `${innerVer}.jar`);
                     if (fs.existsSync(candJson) && fs.existsSync(candJar)) {
-                        assembledRoot = installedCandidate;
-                        versionJsonPath = candJson;
-                        versionJarPath = candJar;
+                        return { json: candJson, jar: candJar, id: innerVer };
                     }
                 }
             }
+        } catch (e) {
+            console.error('[Client Launch] Error finding version files:', e);
         }
-    }
+        return null;
+    };
 
-    // If assembledRoot exists but does not contain files for the requested version, try to detect inner version in built-in path
-    if ((!fs.existsSync(versionJsonPath) || !fs.existsSync(versionJarPath)) && fs.existsSync(assembledRoot)) {
-        const versionsDir2 = path.join(assembledRoot, 'versions');
-        if (fs.existsSync(versionsDir2)) {
-            const inner2 = fs.readdirSync(versionsDir2, { withFileTypes: true }).filter(d => d.isDirectory()).map(d => d.name)[0];
-            if (inner2) {
-                const candJson2 = path.join(versionsDir2, inner2, `${inner2}.json`);
-                const candJar2 = path.join(versionsDir2, inner2, `${inner2}.jar`);
-                if (fs.existsSync(candJson2) && fs.existsSync(candJar2)) {
-                    versionJsonPath = candJson2;
-                    versionJarPath = candJar2;
-                }
+    // If not present in built-in path, check installed clients
+    if (!fs.existsSync(versionJsonPath) || !fs.existsSync(versionJarPath)) {
+        if (fs.existsSync(installedCandidate)) {
+            const found = findVersionFiles(installedCandidate);
+            if (found) {
+                assembledRoot = installedCandidate;
+                versionJsonPath = found.json;
+                versionJarPath = found.jar;
+                actualVersionId = found.id;
+                console.log('[Client Launch] Using installed version:', actualVersionId);
             }
         }
     }
 
+    // If still not found, try built-in path again with version detection
+    if (!fs.existsSync(versionJsonPath) || !fs.existsSync(versionJarPath)) {
+        if (fs.existsSync(assembledRoot)) {
+            const found = findVersionFiles(assembledRoot);
+            if (found) {
+                versionJsonPath = found.json;
+                versionJarPath = found.jar;
+                actualVersionId = found.id;
+                console.log('[Client Launch] Using built-in version:', actualVersionId);
+            }
+        }
+    }
 
     // If still missing, try to download the client release (latest release manifest)
     if (!fs.existsSync(versionJsonPath) || !fs.existsSync(versionJarPath)) {
         try {
+            console.log('[Client Launch] Attempting to download client release...');
             const { manifest } = await fetchLatestClientManifest();
             if (manifest?.archive?.url) {
                 const fileName = path.basename(new URL(manifest.archive.url).pathname);
@@ -938,19 +969,32 @@ ipcMain.handle('client:launch', async (_, payload) => {
                 if (!fs.existsSync(downloadsDir)) fs.mkdirSync(downloadsDir, { recursive: true });
                 const dest = path.join(downloadsDir, fileName);
                 await downloadFile(manifest.archive.url, dest, (p) => { });
-                // install to DATA_DIR/clients/<manifest.version>
-                const tmp = path.join(DATA_DIR, 'clients', `${manifest.version}.tmp`);
-                const final = path.join(DATA_DIR, 'clients', manifest.version);
+                
+                // Install to DATA_DIR/clients/<manifest.version>
+                const clientsRoot = path.join(DATA_DIR, 'clients');
+                if (!fs.existsSync(clientsRoot)) fs.mkdirSync(clientsRoot, { recursive: true });
+                const tmp = path.join(clientsRoot, `${manifest.version}.tmp`);
+                const final = path.join(clientsRoot, manifest.version);
+                
                 try { if (fs.existsSync(tmp)) fs.rmSync(tmp, { recursive: true, force: true }); } catch (e) { }
                 await extractZip(dest, tmp);
                 if (fs.existsSync(final)) fs.rmSync(final, { recursive: true, force: true });
                 fs.renameSync(tmp, final);
                 fs.writeFileSync(path.join(final, 'installed.json'), JSON.stringify({ installed: new Date().toISOString(), version: manifest.version }, null, 2), 'utf8');
+                
                 assembledRoot = final;
-                versionJsonPath = path.join(final, 'versions', manifest.version, `${manifest.version}.json`);
-                versionJarPath = path.join(final, 'versions', manifest.version, `${manifest.version}.jar`);
+                const found = findVersionFiles(final);
+                if (found) {
+                    versionJsonPath = found.json;
+                    versionJarPath = found.jar;
+                    actualVersionId = found.id;
+                    console.log('[Client Launch] Downloaded and installed version:', actualVersionId);
+                } else {
+                    return { ok: false, msg: 'Downloaded client но не удалось найти файлы версии' };
+                }
             }
         } catch (err) {
+            console.error('[Client Launch] Download error:', err);
             /* ignore download failures */
         }
     }
@@ -958,6 +1002,7 @@ ipcMain.handle('client:launch', async (_, payload) => {
     if (!fs.existsSync(versionJsonPath) || !fs.existsSync(versionJarPath)) {
         return { ok: false, msg: 'Файлы собранного клиента не найдены. Пожалуйста, убедитесь, что релиз клиента доступен в GitHub Releases.' };
     }
+    
     const version = readJson(versionJsonPath);
     if (!version) return { ok: false, msg: 'Failed to read version json' };
 
@@ -982,10 +1027,13 @@ ipcMain.handle('client:launch', async (_, payload) => {
     const { classpath, missing } = buildClasspath(version, versionJarPath, mcDir);
     if (missing.length > 0) return { ok: false, msg: `Missing libraries: ${missing.join(', ')}` };
 
+    const instanceDir = path.join(__dirname, 'StratCraftClient', 'instances', actualVersionId);
+    const nativesDir = path.join(instanceDir, 'natives');
+    
     const vars = {
         auth_player_name: username,
-        version_name: version.id || versionId,
-        game_directory: path.join(__dirname, 'StratCraftClient', 'instances', versionId),
+        version_name: version.id || actualVersionId,
+        game_directory: instanceDir,
         assets_root: path.join(mcDir, 'assets'),
         assets_index_name: assetsIndex,
         auth_uuid: uuid,
@@ -994,7 +1042,7 @@ ipcMain.handle('client:launch', async (_, payload) => {
         auth_xuid: '0',
         user_type: 'mojang',
         version_type: version.type || 'release',
-        natives_directory: path.join(__dirname, 'StratCraftClient', 'instances', versionId, 'natives'),
+        natives_directory: nativesDir,
         classpath: classpath.join(classpathSeparator),
         classpath_separator: classpathSeparator,
         library_directory: path.join(mcDir, 'libraries'),
@@ -1011,16 +1059,18 @@ ipcMain.handle('client:launch', async (_, payload) => {
         `-Xms${minRamGb}G`,
         `-Xmx${maxRamGb}G`,
         ...jvmArgs,
-        '-Djava.library.path=' + vars.natives_directory,
+        '-Djava.library.path=' + nativesDir,
         version.mainClass,
         ...gameArgs
     ];
 
     // Ensure instance dir exists
-    const instanceDir = vars.game_directory;
     try {
         if (!fs.existsSync(instanceDir)) fs.mkdirSync(instanceDir, { recursive: true });
-    } catch (e) { /* ignore */ }
+        if (!fs.existsSync(nativesDir)) fs.mkdirSync(nativesDir, { recursive: true });
+    } catch (e) { 
+        console.error('[Client Launch] Failed to create instance directories:', e);
+    }
 
     try {
         const child = spawn(javaCmd, args, {
@@ -1032,6 +1082,7 @@ ipcMain.handle('client:launch', async (_, payload) => {
         child.unref();
         return { ok: true, msg: 'Client launching.' };
     } catch (err) {
+        console.error('[Client Launch] Spawn error:', err);
         return { ok: false, msg: `Launch error: ${err.message}` };
     }
 });
