@@ -30,10 +30,16 @@
             <div class="row">
                 <input id="password" type="password" placeholder="Пароль" />
             </div>
-            <label class="checkbox">
-                <input id="rememberMe" type="checkbox" />
-                <span>Запомнить меня</span>
-            </label>
+            <div class="auth-options">
+                <label class="checkbox auth-option">
+                    <input id="rememberMe" type="checkbox" />
+                    <span>Запомнить меня</span>
+                </label>
+                <label class="checkbox auth-option">
+                    <input id="staySignedIn" type="checkbox" />
+                    <span>Остаться в системе</span>
+                </label>
+            </div>
             <div class="buttons">
                 <button id="loginBtn" class="btn green">Войти</button>
                 <button id="registerBtn" class="btn">Создать аккаунт</button>
@@ -49,7 +55,7 @@
                 </div>
             </div>
 
-            <div class="launcher-version">Launcher v1.0.9</div>
+            <div class="launcher-version">Launcher v1.1.0</div>
         </div>
 
         <div id="mainView" class="main-view hidden">
@@ -104,7 +110,10 @@
         <div class="drawer-content">
             <div class="drawer-title">Профиль</div>
             <div id="profileName" class="drawer-name">—</div>
-            <button id="logoutBtn" class="btn red">Выход из аккаунта</button>
+            <div style="margin-top:8px; margin-bottom:8px;">
+                <button id="checkAuthBtn" class="btn ghost">Проверить авторизацию</button>
+                <div id="authCheckStatus" class="status" style="margin-top:8px;"></div>
+            </div> <button id="logoutBtn" class="btn red">Выход из аккаунта</button>
         </div>
     </div>
 

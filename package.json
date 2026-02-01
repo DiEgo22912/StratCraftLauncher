@@ -1,6 +1,6 @@
 {
     "name": "stratcraft-auth-launcher",
-    "version": "1.0.9",
+    "version": "1.1.0",
     "private": true,
     "description": "Local auth launcher UI for StratCraft",
     "main": "main.js",
@@ -8,16 +8,18 @@
         "start": "electron .",
         "package-win": "electron-packager . StratCraftLauncher --platform=win32 --arch=x64 --out=dist --overwrite --asar=false",
         "build": "electron-builder",
-        "dist:win": "electron-builder --win nsis"
+        "dist:win": "electron-builder --win nsis",
+        "postinstall": "npx electron-rebuild -f -w keytar || echo 'electron-rebuild failed; if using keytar, run npx electron-rebuild -f -w keytar'"
     },
     "devDependencies": {
         "electron": "^33.2.1",
-        "electron-packager": "^17.1.0",
-        "electron-builder": "^24.9.0"
+        "electron-builder": "^24.9.0",
+        "electron-packager": "^17.1.0"
     },
     "dependencies": {
-        "lottie-web": "^5.13.0",
-        "electron-updater": "^5.3.0"
+        "electron-updater": "^5.3.0",
+        "keytar": "^7.9.0",
+        "lottie-web": "^5.13.0"
     },
     "build": {
         "appId": "com.stratcraft.launcher",
