@@ -540,11 +540,21 @@ app.whenReady().then(() => {
     async function extractZip(zipPath, destDir) {
         if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
         if (process.platform === 'win32') {
-            const ps = spawnSync('powershell', ['-NoProfile', '-Command', `Expand-Archive -Path "${zipPath}" -DestinationPath "${destDir}" -Force`], { stdio: 'inherit' });
-            if (ps.status !== 0) throw new Error('Expand-Archive failed');
+            // Hide PowerShell window by using 'pipe' instead of 'inherit' and windowsHide
+            const ps = spawnSync('powershell', ['-NoProfile', '-WindowStyle', 'Hidden', '-Command', `Expand-Archive -Path "${zipPath}" -DestinationPath "${destDir}" -Force`], {
+                stdio: 'pipe',
+                windowsHide: true
+            });
+            if (ps.status !== 0) {
+                const stderr = ps.stderr?.toString() || '';
+                throw new Error(`Expand-Archive failed: ${stderr}`);
+            }
         } else {
-            const z = spawnSync('unzip', ['-o', zipPath, '-d', destDir], { stdio: 'inherit' });
-            if (z.status !== 0) throw new Error('unzip failed');
+            const z = spawnSync('unzip', ['-o', zipPath, '-d', destDir], { stdio: 'pipe' });
+            if (z.status !== 0) {
+                const stderr = z.stderr?.toString() || '';
+                throw new Error(`unzip failed: ${stderr}`);
+            }
         }
     }
 
@@ -1081,11 +1091,35 @@ ipcMain.handle('client:launch', async (_, payload) => {
     try {
         const child = spawn(javaCmd, args, {
             cwd: instanceDir,
-            detached: true,
+            detached: false, // Keep attached to monitor process
             stdio: 'ignore',
             windowsHide: true
         });
-        child.unref();
+
+        // Hide launcher window when client starts
+        if (mainWindow) {
+            mainWindow.hide();
+            console.log('[Client Launch] Launcher window hidden');
+        }
+
+        // Monitor client process and restore launcher when it exits
+        child.on('exit', (code, signal) => {
+            console.log(`[Client Launch] Client exited with code ${code}, signal ${signal}`);
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.show();
+                mainWindow.focus();
+                console.log('[Client Launch] Launcher window restored');
+            }
+        });
+
+        child.on('error', (err) => {
+            console.error('[Client Launch] Client process error:', err);
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.show();
+                mainWindow.focus();
+            }
+        });
+
         return { ok: true, msg: 'Client launching.' };
     } catch (err) {
         console.error('[Client Launch] Spawn error:', err);
