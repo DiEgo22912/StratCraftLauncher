@@ -991,10 +991,13 @@ ipcMain.handle('client:launch', async (_, payload) => {
     const versionId = String(payload?.version || '').trim();
     if (!versionId) return { ok: false, msg: 'Version not specified' };
 
+    console.log('[Client Launch] Requested version:', versionId);
+
     // Try multiple locations/fallbacks for assembled client:
     // 1) Built-in assembled copy under StratCraftClient/client-files/<version>
     // 2) Installed clients under DATA_DIR/clients/<version>
-    // 3) Attempt to download & install client release from GitHub
+    // 3) Search all installed clients for matching detectedVersion
+    // 4) Attempt to download & install client release from GitHub
     let assembledRoot = path.join(USER_DATA_DIR, 'StratCraftClient', 'client-files', versionId);
     let versionJsonPath = path.join(assembledRoot, 'versions', versionId, `${versionId}.json`);
     let versionJarPath = path.join(assembledRoot, 'versions', versionId, `${versionId}.jar`);
@@ -1024,7 +1027,7 @@ ipcMain.handle('client:launch', async (_, payload) => {
         return null;
     };
 
-    // If not present in built-in path, check installed clients
+    // If not present in built-in path, check installed clients by folder name
     if (!fs.existsSync(versionJsonPath) || !fs.existsSync(versionJarPath)) {
         if (fs.existsSync(installedCandidate)) {
             const found = findVersionFiles(installedCandidate);
@@ -1033,7 +1036,55 @@ ipcMain.handle('client:launch', async (_, payload) => {
                 versionJsonPath = found.json;
                 versionJarPath = found.jar;
                 actualVersionId = found.id;
-                console.log('[Client Launch] Using installed version:', actualVersionId);
+                console.log('[Client Launch] Using installed version by folder name:', actualVersionId);
+            }
+        }
+    }
+
+    // If still not found, search all installed clients for matching detectedVersion or version
+    if (!fs.existsSync(versionJsonPath) || !fs.existsSync(versionJarPath)) {
+        const clientsRoot = path.join(DATA_DIR, 'clients');
+        if (fs.existsSync(clientsRoot)) {
+            const clientDirs = fs.readdirSync(clientsRoot, { withFileTypes: true })
+                .filter(d => d.isDirectory())
+                .map(d => d.name);
+            
+            console.log('[Client Launch] Searching installed clients:', clientDirs);
+            
+            for (const clientName of clientDirs) {
+                const clientPath = path.join(clientsRoot, clientName);
+                const metaPath = path.join(clientPath, 'installed.json');
+                
+                // Check if this client matches by metadata
+                let matches = false;
+                if (fs.existsSync(metaPath)) {
+                    try {
+                        const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
+                        console.log('[Client Launch] Checking client:', clientName, 'meta:', meta);
+                        // Match by folder name, version, or detectedVersion
+                        if (clientName === versionId || 
+                            meta.version === versionId || 
+                            meta.detectedVersion === versionId) {
+                            matches = true;
+                        }
+                    } catch (e) { }
+                }
+                
+                // Also try to find version files directly if folder looks like a client
+                if (matches || !fs.existsSync(versionJsonPath)) {
+                    const found = findVersionFiles(clientPath);
+                    if (found) {
+                        // If we're matching by versionId OR the found version matches versionId
+                        if (matches || found.id === versionId) {
+                            assembledRoot = clientPath;
+                            versionJsonPath = found.json;
+                            versionJarPath = found.jar;
+                            actualVersionId = found.id;
+                            console.log('[Client Launch] Found matching client:', clientName, 'version:', actualVersionId);
+                            break;
+                        }
+                    }
+                }
             }
         }
     }
@@ -1053,6 +1104,7 @@ ipcMain.handle('client:launch', async (_, payload) => {
 
     // If still missing, try to download the client release (latest release manifest)
     if (!fs.existsSync(versionJsonPath) || !fs.existsSync(versionJarPath)) {
+        console.log('[Client Launch] No local client found, attempting download...');
         try {
             console.log('[Client Launch] Attempting to download client release...');
             const { manifest } = await fetchLatestClientManifest();

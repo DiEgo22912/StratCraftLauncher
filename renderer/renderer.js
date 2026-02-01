@@ -577,7 +577,7 @@ saveSettingsBtn.addEventListener('click', async () => {
 
 // Unified launch/update button behavior
 async function setLaunchButtonToLaunch(preferredVersion) {
-    // preferredVersion: optional string (installed meta.version or name)
+    // preferredVersion: folder name of the installed client (client.name)
     launchBtn.textContent = 'Запустить';
     launchBtn.classList.remove('danger');
     launchBtn.onclick = async () => {
@@ -588,19 +588,23 @@ async function setLaunchButtonToLaunch(preferredVersion) {
         setMainStatus('Запуск клиента...', true);
         const targetHost = localAddress || serverHost;
         const address = serverPort ? `${targetHost}:${serverPort}` : targetHost;
-        // choose version: prefer provided, else try to pick an installed client
+        // choose version: prefer provided folder name, else try to pick first installed client folder
         let versionToUse = preferredVersion;
         try {
             if (!versionToUse && window.client?.installed) {
                 const listRes = await window.client.installed();
                 const clients = (listRes?.ok !== false) ? listRes.clients || [] : [];
                 if (clients.length > 0) {
-                    versionToUse = clients[0].meta?.version || clients[0].name;
+                    // Use folder name (client.name) not meta.version
+                    versionToUse = clients[0].name;
+                    console.log('[Launch] Using first installed client folder:', versionToUse);
                 }
             }
-        } catch (e) { }
+        } catch (e) { console.error('[Launch] Error getting installed clients:', e); }
         if (!versionToUse) versionToUse = '1.20.1-forge-47.4.16'; // fallback
 
+        console.log('[Launch] Launching with version:', versionToUse);
+        
         const payload = {
             version: versionToUse,
             username: username.value.trim(),
@@ -734,8 +738,11 @@ async function checkClientUpdateAndApplyUI() {
             return;
         }
         // no update - client is up to date
-        // prefer an installed client version if present
-        const preferred = (installed && installed.length > 0) ? (installed[0].meta?.detectedVersion || installed[0].meta?.version || installed[0].name) : undefined;
+        // Use folder name (client.name) for launch - this matches the actual directory structure
+        // The detectedVersion is just metadata, but launch needs the actual folder name
+        const preferredClient = (installed && installed.length > 0) ? installed[0] : null;
+        const preferred = preferredClient ? preferredClient.name : undefined;
+        console.log('[Client Check] Using installed client:', preferred, 'meta:', preferredClient?.meta);
         setLaunchButtonToLaunch(preferred);
         setMainStatus('Клиент актуален. Готово к запуску.', true);
         const remoteEl = document.getElementById('clientRemoteVersion');
