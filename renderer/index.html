@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>StratCraft Launcher</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="settings-styles.css" />
+</head>
+
+<body>
+    <div class="animated-bg"></div>
+    <div class="container">
+        <header id="mainHeader">
+            <h1 id="appTitle">StratCraft Server</h1>
+            <div class="subtitle">Локальная авторизация</div>
+        </header>
+
+        <div id="authView" class="card">
+            <div class="card-logo">
+                <div class="logo-icon">🎮</div>
+                <div class="logo-glow"></div>
+            </div>
+            <h2>Вход в лаунчер</h2>
+            <div class="card-description">Добро пожаловать в StratCraft</div>
+            <div class="row">
+                <input id="username" placeholder="Ник" />
+            </div>
+            <div class="row">
+                <input id="password" type="password" placeholder="Пароль" />
+            </div>
+            <div class="auth-options">
+                <label class="checkbox auth-option">
+                    <input id="rememberMe" type="checkbox" />
+                    <span>Запомнить меня</span>
+                </label>
+                <label class="checkbox auth-option">
+                    <input id="staySignedIn" type="checkbox" />
+                    <span>Остаться в системе</span>
+                </label>
+            </div>
+            <div class="buttons">
+                <button id="loginBtn" class="btn green">Войти</button>
+                <button id="registerBtn" class="btn">Создать аккаунт</button>
+            </div>
+            <div id="status" class="status"></div>
+
+            <div class="server-preview">
+                <div class="preview-title">📡 Статус сервера</div>
+                <div class="preview-info">
+                    <span id="authServerDot" class="server-dot"></span>
+                    <span id="authServerState">—</span>
+                    <span id="authServerPlayers" class="preview-players">—</span>
+                </div>
+            </div>
+
+            <div class="launcher-version">Launcher v1.1.0</div>
+        </div>
+
+        <div id="mainView" class="main-view hidden">
+            <div class="launcher-shell">
+                <div class="topbar">
+                    <div class="brand">
+                        <div class="brand-icon">CS</div>
+                        <div class="brand-text">StratCraft Server</div>
+                    </div>
+                    <nav class="nav">
+                        <button class="nav-item active">Главная</button>
+                        <button id="settingsBtn" class="nav-item">
+                            <span class="nav-icon" id="settingsAnim"></span>
+                            Настройки
+                        </button>
+                    </nav>
+                </div>
+
+                <div class="hero">
+                    <div class="hero-content">
+                        <div class="hero-title">Добро пожаловать в StratCraft</div>
+                        <div class="hero-subtitle">Локальный лаунчер с быстрым запуском сборки.</div>
+                    </div>
+                    <div class="hero-badge">NEO</div>
+                </div>
+
+                <div class="playbar">
+                    <div class="play-info">
+                        <div class="play-title">TARCRAFT 1.0.0</div>
+                        <div id="mainStatus" class="status">Готово к запуску.</div>
+                        <div class="server-status">
+                            <span id="serverDot" class="server-dot"></span>
+                            <span id="serverState">Оффлайн</span>
+                            <span id="serverPlayers" class="server-players">0/0</span>
+                        </div>
+                        <!-- Client download/install progress bar -->
+                        <div id="clientProgressContainer" class="client-progress-container" style="display: none;">
+                            <div class="client-progress-header">
+                                <span id="clientProgressText">0%</span>
+                                <span id="clientProgressSpeed"></span>
+                                <span id="clientProgressEta"></span>
+                            </div>
+                            <div class="client-progress-track">
+                                <div id="clientProgressBar" class="client-progress-bar"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="play-actions" style="display:flex; gap:8px; align-items:center;">
+                        <button id="launchBtn" class="btn play">Запустить</button>
+                        <div id="playAux" style="display:inline-block"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="profileBtn" class="profile-avatar hidden">
+        <div class="avatar-icon">👤</div>
+        <div class="avatar-status"></div>
+    </div>
+
+    <div id="profileDrawer" class="drawer hidden">
+        <div class="drawer-content">
+            <div class="drawer-title">Профиль</div>
+            <div id="profileName" class="drawer-name">—</div>
+            <div style="margin-top:8px; margin-bottom:8px;">
+                <button id="checkAuthBtn" class="btn ghost">Проверить авторизацию</button>
+                <div id="authCheckStatus" class="status" style="margin-top:8px;"></div>
+            </div> <button id="logoutBtn" class="btn red">Выход из аккаунта</button>
+        </div>
+    </div>
+
+    <div id="registerModal" class="modal hidden">
+        <div class="modal-content">
+            <h2>Регистрация</h2>
+            <div class="row">
+                <input id="regUsername" placeholder="Ник" />
+            </div>
+            <div class="row">
+                <input id="regPassword" type="password" placeholder="Пароль" />
+            </div>
+            <div class="row">
+                <input id="regPassword2" type="password" placeholder="Повтор пароля" />
+            </div>
+            <div class="buttons">
+                <button id="registerConfirmBtn" class="btn green">Создать</button>
+                <button id="registerCancelBtn" class="btn">Отмена</button>
+            </div>
+            <div id="registerStatus" class="status"></div>
+        </div>
+    </div>
+
+    <div id="launcherUpdateModal" class="modal hidden">
+        <div class="modal-content">
+            <h2>Вышло новое обновление!</h2>
+            <div id="launcherUpdateDetails" style="margin-top:8px; font-size:13px; color:#9aa4b2">
+                Версия: <strong id="launcherUpdateVersion">—</strong>
+            </div>
+            <div id="launcherUpdateStatus" style="margin-top:12px; color:#9aa4b2">Доступно новое обновление лаунчера.
+            </div>
+            <div class="buttons" style="margin-top:16px; display:flex; gap:8px; justify-content:flex-end;">
+                <button id="launcherInstallBtn" class="btn green">Установить обновление</button>
+                <button id="launcherCloseBtn" class="btn">Закрыть</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="settingsModal" class="modal hidden">
+        <div class="modal-content settings-panel">
+            <h2>⚙️ Настройки лаунчера</h2>
+
+            <div class="settings-section">
+                <div class="settings-header">💾 Оперативная память</div>
+                <div class="ram-controls">
+                    <div class="ram-display">
+                        <span class="ram-label">Выделено:</span>
+                        <input id="ramInput" type="number" min="2" step="1" class="ram-input" />
+                        <span class="ram-unit">GB</span>
+                    </div>
+                    <div class="row">
+                        <input id="maxRam" type="range" min="2" step="1" class="ram-slider" />
+                    </div>
+                    <div class="ram-info">
+                        <span>Доступно: <span id="systemRam">16</span> GB</span>
+                        <span class="ram-recommendation">Рекомендуется: 4-8 GB</span>
+                    </div>
+                </div>
+            </div>
+
+
+
+            <div class="buttons">
+                <button id="saveSettingsBtn" class="btn green">Сохранить</button>
+                <button id="cancelSettingsBtn" class="btn">Отмена</button>
+            </div>
+
+            <div class="settings-section settings-row">
+                <label class="checkbox small">
+                    <input type="checkbox" id="autoCheckUpdates" />
+                    <span>Автоматически проверять обновления лаунчера</span>
+                </label>
+            </div>
+
+
+
+            <div class="update-controls" style="margin-top:12px; display:flex; gap:10px; align-items:center;">
+                <button id="checkUpdatesBtn" class="btn ghost">Проверить обновления лаунчера</button>
+                <span id="updateStatus" class="update-status"></span>
+                <progress id="updateProgress" value="0" max="100" style="width:160px; display:none"></progress>
+                <span id="updateEta" class="update-eta" style="margin-left:8px"></span>
+            </div>
+        </div>
+    </div>
+
+
+
+    <div id="transition" class="transition hidden">
+        <div class="transition-title">StratCraft Server</div>
+    </div>
+
+    <script src="../node_modules/lottie-web/build/player/lottie.min.js"></script>
+    <script src="renderer.js"></script>
+</body>
+
+</html>

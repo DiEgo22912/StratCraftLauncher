@@ -1,0 +1,71 @@
+{
+    "name": "tarcraft-auth-launcher",
+    "version": "1.1.10",
+    "private": true,
+    "description": "Local auth launcher UI for TARCRAFT",
+    "author": {
+        "name": "yukinch",
+        "email": "yukinch@tarcraft.com"
+    },
+    "main": "main.js",
+    "scripts": {
+        "start": "electron .",
+        "package-win": "electron-packager . TARCRAFTLauncher --platform=win32 --arch=x64 --out=dist --overwrite --asar=false",
+        "build": "electron-builder",
+        "dist:win": "electron-builder --win nsis",
+        "postinstall": "npx electron-rebuild -f -w keytar || echo 'electron-rebuild failed; if using keytar, run npx electron-rebuild -f -w keytar'"
+    },
+    "devDependencies": {
+        "electron": "^33.2.1",
+        "electron-builder": "^24.9.0",
+        "electron-packager": "^17.1.0"
+    },
+    "dependencies": {
+        "electron-updater": "^5.3.0",
+        "keytar": "^7.9.0",
+        "lottie-web": "^5.13.0"
+    },
+    "build": {
+        "appId": "com.tarcraft.launcher",
+        "productName": "TARCRAFTLauncher",
+        "files": [
+            "**/*",
+            "!TARCRAFTClient/client-files/**",
+            "!**/*.map",
+            "!**/test/**",
+            "!**/*.md",
+            "!**/TARCRAFTClient/*.zip"
+        ],
+        "asar": true,
+        "win": {
+            "target": [
+                "nsis"
+            ],
+            "artifactName": "TARCRAFTLauncher-setup-${version}.${ext}",
+            "publisherName": "yukinch",
+            "verifyUpdateCodeSignature": false,
+            "signingHashAlgorithms": [
+                "sha256"
+            ],
+            "sign": null,
+            "signDlls": false
+        },
+        "nsis": {
+            "oneClick": false,
+            "perMachine": false,
+            "allowElevation": true,
+            "allowToChangeInstallationDirectory": true,
+            "createDesktopShortcut": true,
+            "createStartMenuShortcut": true,
+            "shortcutName": "TARCRAFT Launcher"
+        },
+        "publish": [
+            {
+                "provider": "github",
+                "owner": "DiEgo22912",
+                "repo": "StratCraftLauncher",
+                "releaseType": "release"
+            }
+        ]
+    }
+}
