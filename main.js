@@ -1432,7 +1432,28 @@ ipcMain.handle('client:launch', async (_, payload) => {
     const settings = loadSettings();
     const minRamGb = Number(settings.minRamGb ?? 2);
     const maxRamGb = Number(settings.maxRamGb ?? 6);
-    const javaCmd = resolveJavaCommand();
+    
+    // Resolve Java with fallback to bundled Java
+    console.log('[Client Launch] Resolving Java command...');
+    let javaCmd = resolveJavaCommand();
+    if (!javaCmd) {
+        console.log('[Client Launch] No system Java, checking bundled Java...');
+        javaCmd = findBundledJava([assembledRoot, path.join(USER_DATA_DIR, 'StratCraftClient')]);
+    }
+    if (!javaCmd || typeof javaCmd !== 'string' || javaCmd.trim() === '') {
+        console.error('[Client Launch] FATAL: Java not found. javaCmd=', javaCmd);
+        const msg = 'Java не найдена. Установите Java 11+ (например, Eclipse Temurin) и перезапустите лаунчер.';
+        try {
+            dialog.showMessageBox({
+                type: 'error',
+                title: 'TARCRAFT Launcher',
+                message: 'Не удалось запустить клиент',
+                detail: msg
+            });
+        } catch (e) { }
+        return { ok: false, msg };
+    }
+    console.log('[Client Launch] Using Java:', javaCmd);
 
     const username = String(payload?.username || 'Player');
     const uuid = String(payload?.uuid || offlineUuid(username));
