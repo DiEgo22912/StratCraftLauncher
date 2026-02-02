@@ -158,6 +158,7 @@ function saveSettings(settings) {
 
 function resolveJavaCommand() {
     const found = findSuitableJavaSync();
+    console.log('[Java] resolveJavaCommand result:', found);
     return found || null;
 }
 
@@ -166,9 +167,13 @@ function getJavaMajorVersion(javaExe) {
         const sp = spawnSync(javaExe, ['-version'], { encoding: 'utf8' });
         const out = (sp.stderr || '') + (sp.stdout || '');
         const m = out.match(/version "(\d+)(?:\.(\d+))?/);
-        if (!m) return null;
+        if (!m) {
+            console.log('[Java] Could not parse version from:', out.substring(0, 100));
+            return null;
+        }
         return parseInt(m[1], 10);
     } catch (e) {
+        console.log('[Java] Version check failed for', javaExe, ':', e.message);
         return null;
     }
 }
@@ -177,14 +182,19 @@ function probeJavaCandidates() {
     const tried = new Set();
     const candidates = [];
     const isWin = process.platform === 'win32';
+
+    // 1. Check JAVA_HOME environment variable
     if (process.env.JAVA_HOME) {
+        console.log('[Java] Checking JAVA_HOME:', process.env.JAVA_HOME);
         candidates.push(path.join(process.env.JAVA_HOME, 'bin', isWin ? 'javaw.exe' : 'java'));
         candidates.push(path.join(process.env.JAVA_HOME, 'bin', isWin ? 'java.exe' : 'java'));
     }
-    // PATH names
+
+    // 2. Try PATH names (most flexible, uses system Java)
     candidates.push(isWin ? 'javaw' : 'java');
     candidates.push('java');
-    // common Windows install locations
+
+    // 3. Common Windows install locations
     if (isWin) {
         const roots = [
             'C:\\Program Files\\Eclipse Adoptium',
@@ -204,36 +214,61 @@ function probeJavaCandidates() {
         }
     }
 
+    // Deduplicate
     for (const c of candidates) {
         if (!c || tried.has(c)) continue;
         tried.add(c);
     }
+
+    console.log('[Java] Candidate list:', Array.from(tried));
     return Array.from(tried);
 }
 
 function findSuitableJavaSync() {
     const candidates = probeJavaCandidates();
     let best = null;
+
     for (const c of candidates) {
+        if (!c) continue;
+
         let exe = c;
         // if just 'java' or 'javaw' rely on PATH
         if (exe === 'java' || exe === 'javaw') {
+            console.log('[Java] Testing PATH java:', exe);
             // leave as-is
-        } else if (!fs.existsSync(exe)) {
-            continue;
+        } else {
+            if (!fs.existsSync(exe)) {
+                console.log('[Java] Does not exist:', exe);
+                continue;
+            }
+            console.log('[Java] Testing:', exe);
         }
+
         const v = getJavaMajorVersion(exe);
+        console.log('[Java] Version for', exe, 'is', v);
+
         if (!v) continue;
-        // prefer exact 17, otherwise pick highest >=17 and <21
-        if (v === 17) return exe;
-        if (v >= 17 && v < 21) {
-            if (!best) best = exe;
-            else {
+
+        // prefer exact 17, otherwise pick highest >=11 and <30 (be flexible)
+        if (v === 17) {
+            console.log('[Java] Found exact Java 17:', exe);
+            return exe;
+        }
+        if (v >= 11 && v < 30) {
+            if (!best) {
+                console.log('[Java] Found suitable Java', v, ':', exe);
+                best = exe;
+            } else {
                 const bestV = getJavaMajorVersion(best);
-                if (v > bestV) best = exe;
+                if (v > bestV) {
+                    console.log('[Java] Better version found, replacing', bestV, 'with', v);
+                    best = exe;
+                }
             }
         }
     }
+
+    console.log('[Java] Selected Java:', best);
     return best;
 }
 
@@ -241,6 +276,9 @@ function findBundledJava(rootDirs) {
     const isWin = process.platform === 'win32';
     const exeName = isWin ? 'javaw.exe' : 'java';
     const candidates = [];
+
+    console.log('[Java] Searching for bundled Java in roots:', rootDirs);
+
     for (const root of rootDirs) {
         if (!root) continue;
         candidates.push(path.join(root, 'runtime', 'bin', exeName));
@@ -248,11 +286,19 @@ function findBundledJava(rootDirs) {
         candidates.push(path.join(root, 'jdk', 'bin', exeName));
         candidates.push(path.join(root, 'java', 'bin', exeName));
     }
+
     for (const c of candidates) {
         try {
-            if (fs.existsSync(c)) return c;
-        } catch (e) { }
+            if (fs.existsSync(c)) {
+                console.log('[Java] Found bundled Java:', c);
+                return c;
+            }
+        } catch (e) {
+            console.log('[Java] Error checking', c, ':', e.message);
+        }
     }
+
+    console.log('[Java] No bundled Java found');
     return null;
 }
 
@@ -1005,12 +1051,16 @@ ipcMain.handle('launcher:launch', (_, payload) => {
     if (!Number.isFinite(maxRamGb) || maxRamGb < 1) maxRamGb = 6;
     if (maxRamGb > totalRamGb) maxRamGb = Math.max(2, totalRamGb - 1);
     if (minRamGb > maxRamGb) minRamGb = Math.max(1, Math.min(2, maxRamGb));
+    
+    console.log('[Launch] Resolving Java command...');
     let javaCmd = resolveJavaCommand();
     if (!javaCmd) {
+        console.log('[Launch] No system Java found, checking bundled Java...');
         javaCmd = findBundledJava([assembledRoot, path.join(USER_DATA_DIR, 'StratCraftClient')]);
     }
-    if (!javaCmd) {
-        const msg = 'Java не найдена. Установите Java 17 (например, Eclipse Temurin) или укажите JAVA_HOME. Если в клиенте есть встроенная Java, убедитесь что папка runtime/jre присутствует.';
+    if (!javaCmd || typeof javaCmd !== 'string' || javaCmd.trim() === '') {
+        console.error('[Launch] FATAL: Java not found. javaCmd=', javaCmd, 'type=', typeof javaCmd);
+        const msg = 'Java не найдена. Установите Java 11+ (например, Eclipse Temurin) или укажите JAVA_HOME окружающую переменную. Если в клиенте есть встроенная Java, убедитесь что папка runtime/jre присутствует.';
         try {
             dialog.showMessageBox({
                 type: 'error',
@@ -1069,7 +1119,16 @@ ipcMain.handle('launcher:launch', (_, payload) => {
         ...gameArgs
     ];
 
+    console.log('[Launch] Java command:', javaCmd);
+    console.log('[Launch] Args count:', args.length);
+    console.log('[Launch] Working directory:', INSTANCE_DIR);
+
     try {
+        // Validate javaCmd before spawn
+        if (!javaCmd || typeof javaCmd !== 'string' || javaCmd.length === 0) {
+            throw new Error(`Invalid Java command: ${javaCmd}`);
+        }
+        
         const child = spawn(javaCmd, args, {
             cwd: INSTANCE_DIR,
             detached: true,
@@ -1077,8 +1136,10 @@ ipcMain.handle('launcher:launch', (_, payload) => {
             windowsHide: true
         });
         child.unref();
+        console.log('[Launch] Game started successfully, PID:', child.pid);
         return { ok: true, msg: 'Игра запускается.' };
     } catch (err) {
+        console.error('[Launch] Spawn error:', err.message);
         return { ok: false, msg: `Ошибка запуска: ${err.message}` };
     }
 });
