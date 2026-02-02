@@ -395,6 +395,7 @@ document.addEventListener('keydown', (e) => {
 const profileOverlay = document.getElementById('profileOverlay');
 
 function openProfileDrawer() {
+    profileBtn.classList.add('hidden'); // Hide profile button when drawer is open
     profileOverlay.classList.remove('hidden');
     profileDrawer.classList.remove('hidden');
     requestAnimationFrame(() => {
@@ -409,6 +410,7 @@ function closeProfileDrawer() {
     setTimeout(() => {
         profileDrawer.classList.add('hidden');
         profileOverlay.classList.add('hidden');
+        profileBtn.classList.remove('hidden'); // Show profile button again
     }, 300);
 }
 

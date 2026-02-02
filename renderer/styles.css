@@ -252,26 +252,22 @@ header.in-main #appTitle.slide-in {
 }
 
 .logo-icon-img {
-    width: 100px;
-    height: 100px;
-    object-fit: cover;
-    border-radius: 20px;
-    border: 3px solid var(--accent-primary);
+    width: 120px;
+    height: 120px;
+    object-fit: contain;
+    border-radius: 0;
+    border: none;
+    background: transparent;
     position: relative;
     z-index: 2;
     animation: logo-pulse 3s ease-in-out infinite;
-    box-shadow:
-        0 0 30px var(--glow-red),
-        0 10px 40px rgba(0, 0, 0, 0.5),
-        inset 0 0 20px rgba(201, 48, 44, 0.3);
+    filter: drop-shadow(0 0 20px var(--glow-red)) drop-shadow(0 5px 15px rgba(0, 0, 0, 0.5));
     transition: all 0.3s ease;
 }
 
 .logo-icon-img:hover {
-    transform: scale(1.05);
-    box-shadow:
-        0 0 50px var(--glow-red),
-        0 15px 50px rgba(0, 0, 0, 0.6);
+    transform: scale(1.08);
+    filter: drop-shadow(0 0 35px var(--glow-red)) drop-shadow(0 8px 20px rgba(0, 0, 0, 0.6));
 }
 
 .logo-icon {
@@ -675,18 +671,19 @@ input::placeholder {
 }
 
 .brand-logo {
-    width: 40px;
-    height: 40px;
-    border-radius: 10px;
-    object-fit: cover;
-    border: 2px solid var(--accent-primary);
-    box-shadow: 0 0 20px var(--glow-red);
+    width: 44px;
+    height: 44px;
+    border-radius: 0;
+    object-fit: contain;
+    border: none;
+    background: transparent;
+    filter: drop-shadow(0 0 12px var(--glow-red));
     transition: all 0.3s ease;
 }
 
 .brand-logo:hover {
-    transform: scale(1.1);
-    box-shadow: 0 0 30px var(--glow-red);
+    transform: scale(1.15);
+    filter: drop-shadow(0 0 20px var(--glow-red));
 }
 
 .brand-icon {
@@ -872,14 +869,22 @@ input::placeholder {
     margin-top: 8px;
     font-size: 12px;
     color: var(--text-secondary);
+    flex-wrap: nowrap;
 }
 
 .server-dot {
     width: 10px;
     height: 10px;
+    min-width: 10px;
     border-radius: 50%;
     background: var(--text-muted);
     transition: all 0.3s ease;
+}
+
+.server-players {
+    color: var(--accent-orange);
+    font-weight: 600;
+    white-space: nowrap;
 }
 
 .server-dot.online {
