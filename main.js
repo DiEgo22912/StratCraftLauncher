@@ -157,13 +157,103 @@ function saveSettings(settings) {
 }
 
 function resolveJavaCommand() {
-    const isWin = process.platform === 'win32';
-    const javaHome = process.env.JAVA_HOME;
-    if (javaHome) {
-        const candidate = path.join(javaHome, 'bin', isWin ? 'javaw.exe' : 'java');
-        if (fs.existsSync(candidate)) return candidate;
+    const found = findSuitableJavaSync();
+    return found || null;
+}
+
+function getJavaMajorVersion(javaExe) {
+    try {
+        const sp = spawnSync(javaExe, ['-version'], { encoding: 'utf8' });
+        const out = (sp.stderr || '') + (sp.stdout || '');
+        const m = out.match(/version "(\d+)(?:\.(\d+))?/);
+        if (!m) return null;
+        return parseInt(m[1], 10);
+    } catch (e) {
+        return null;
     }
-    return isWin ? 'javaw' : 'java';
+}
+
+function probeJavaCandidates() {
+    const tried = new Set();
+    const candidates = [];
+    const isWin = process.platform === 'win32';
+    if (process.env.JAVA_HOME) {
+        candidates.push(path.join(process.env.JAVA_HOME, 'bin', isWin ? 'javaw.exe' : 'java'));
+        candidates.push(path.join(process.env.JAVA_HOME, 'bin', isWin ? 'java.exe' : 'java'));
+    }
+    // PATH names
+    candidates.push(isWin ? 'javaw' : 'java');
+    candidates.push('java');
+    // common Windows install locations
+    if (isWin) {
+        const roots = [
+            'C:\\Program Files\\Eclipse Adoptium',
+            'C:\\Program Files\\AdoptOpenJDK',
+            'C:\\Program Files\\Amazon Corretto',
+            'C:\\Program Files\\Zulu',
+            'C:\\Program Files\\Java'
+        ];
+        for (const r of roots) {
+            try {
+                if (!fs.existsSync(r)) continue;
+                for (const name of fs.readdirSync(r)) {
+                    const p = path.join(r, name, 'bin', 'javaw.exe');
+                    candidates.push(p);
+                }
+            } catch (e) { }
+        }
+    }
+
+    for (const c of candidates) {
+        if (!c || tried.has(c)) continue;
+        tried.add(c);
+    }
+    return Array.from(tried);
+}
+
+function findSuitableJavaSync() {
+    const candidates = probeJavaCandidates();
+    let best = null;
+    for (const c of candidates) {
+        let exe = c;
+        // if just 'java' or 'javaw' rely on PATH
+        if (exe === 'java' || exe === 'javaw') {
+            // leave as-is
+        } else if (!fs.existsSync(exe)) {
+            continue;
+        }
+        const v = getJavaMajorVersion(exe);
+        if (!v) continue;
+        // prefer exact 17, otherwise pick highest >=17 and <21
+        if (v === 17) return exe;
+        if (v >= 17 && v < 21) {
+            if (!best) best = exe;
+            else {
+                const bestV = getJavaMajorVersion(best);
+                if (v > bestV) best = exe;
+            }
+        }
+    }
+    return best;
+}
+
+function findBundledJava(rootDirs) {
+    const isWin = process.platform === 'win32';
+    const exeName = isWin ? 'javaw.exe' : 'java';
+    const candidates = [];
+    for (const root of rootDirs) {
+        if (!root) continue;
+        candidates.push(path.join(root, 'runtime', 'bin', exeName));
+        candidates.push(path.join(root, 'jre', 'bin', exeName));
+        candidates.push(path.join(root, 'jdk', 'bin', exeName));
+        candidates.push(path.join(root, 'java', 'bin', exeName));
+    }
+    for (const c of candidates) {
+        try {
+            if (fs.existsSync(c)) return c;
+        } catch (e) { }
+    }
+    return null;
 }
 
 function readServerPort() {
@@ -608,23 +698,35 @@ app.whenReady().then(async () => {
 
     async function extractZip(zipPath, destDir) {
         if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
-        if (process.platform === 'win32') {
-            // Hide PowerShell window by using 'pipe' instead of 'inherit' and windowsHide
-            const ps = spawnSync('powershell', ['-NoProfile', '-WindowStyle', 'Hidden', '-Command', `Expand-Archive -Path "${zipPath}" -DestinationPath "${destDir}" -Force`], {
-                stdio: 'pipe',
-                windowsHide: true
-            });
-            if (ps.status !== 0) {
-                const stderr = ps.stderr?.toString() || '';
-                throw new Error(`Expand-Archive failed: ${stderr}`);
+        return new Promise((resolve, reject) => {
+            if (process.platform === 'win32') {
+                // Hide PowerShell window; use async spawn to avoid blocking main process
+                const ps = spawn('powershell', [
+                    '-NoProfile',
+                    '-WindowStyle', 'Hidden',
+                    '-Command', `Expand-Archive -Path "${zipPath}" -DestinationPath "${destDir}" -Force`
+                ], {
+                    stdio: 'pipe',
+                    windowsHide: true
+                });
+                let stderr = '';
+                ps.stderr?.on('data', d => { stderr += d.toString(); });
+                ps.on('error', reject);
+                ps.on('close', (code) => {
+                    if (code === 0) return resolve();
+                    return reject(new Error(`Expand-Archive failed: ${stderr}`));
+                });
+            } else {
+                const z = spawn('unzip', ['-o', zipPath, '-d', destDir], { stdio: 'pipe' });
+                let stderr = '';
+                z.stderr?.on('data', d => { stderr += d.toString(); });
+                z.on('error', reject);
+                z.on('close', (code) => {
+                    if (code === 0) return resolve();
+                    return reject(new Error(`unzip failed: ${stderr}`));
+                });
             }
-        } else {
-            const z = spawnSync('unzip', ['-o', zipPath, '-d', destDir], { stdio: 'pipe' });
-            if (z.status !== 0) {
-                const stderr = z.stderr?.toString() || '';
-                throw new Error(`unzip failed: ${stderr}`);
-            }
-        }
+        });
     }
 
     ipcMain.handle('client:update:check', async () => {
@@ -896,9 +998,29 @@ ipcMain.handle('launcher:launch', (_, payload) => {
     }
 
     const settings = loadSettings();
-    const minRamGb = Number(settings.minRamGb ?? 2);
-    const maxRamGb = Number(settings.maxRamGb ?? 6);
-    const javaCmd = resolveJavaCommand();
+    let minRamGb = Number(settings.minRamGb ?? 2);
+    let maxRamGb = Number(settings.maxRamGb ?? 6);
+    const totalRamGb = Math.max(2, Math.floor(os.totalmem() / (1024 ** 3)));
+    if (!Number.isFinite(minRamGb) || minRamGb < 1) minRamGb = 2;
+    if (!Number.isFinite(maxRamGb) || maxRamGb < 1) maxRamGb = 6;
+    if (maxRamGb > totalRamGb) maxRamGb = Math.max(2, totalRamGb - 1);
+    if (minRamGb > maxRamGb) minRamGb = Math.max(1, Math.min(2, maxRamGb));
+    let javaCmd = resolveJavaCommand();
+    if (!javaCmd) {
+        javaCmd = findBundledJava([assembledRoot, path.join(USER_DATA_DIR, 'StratCraftClient')]);
+    }
+    if (!javaCmd) {
+        const msg = 'Java не найдена. Установите Java 17 (например, Eclipse Temurin) или укажите JAVA_HOME. Если в клиенте есть встроенная Java, убедитесь что папка runtime/jre присутствует.';
+        try {
+            dialog.showMessageBox({
+                type: 'error',
+                title: 'StratCraftLauncher',
+                message: 'Не удалось запустить клиент',
+                detail: msg
+            });
+        } catch (e) { }
+        return { ok: false, msg };
+    }
     const username = String(payload?.username || '').trim() || 'Player';
     const uuid = offlineUuid(username);
     const mcDir = fs.existsSync(GAME_DIR) ? GAME_DIR : DEFAULT_MC_DIR;
@@ -1048,13 +1170,13 @@ ipcMain.handle('client:launch', async (_, payload) => {
             const clientDirs = fs.readdirSync(clientsRoot, { withFileTypes: true })
                 .filter(d => d.isDirectory())
                 .map(d => d.name);
-            
+
             console.log('[Client Launch] Searching installed clients:', clientDirs);
-            
+
             for (const clientName of clientDirs) {
                 const clientPath = path.join(clientsRoot, clientName);
                 const metaPath = path.join(clientPath, 'installed.json');
-                
+
                 // Check if this client matches by metadata
                 let matches = false;
                 if (fs.existsSync(metaPath)) {
@@ -1062,14 +1184,14 @@ ipcMain.handle('client:launch', async (_, payload) => {
                         const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
                         console.log('[Client Launch] Checking client:', clientName, 'meta:', meta);
                         // Match by folder name, version, or detectedVersion
-                        if (clientName === versionId || 
-                            meta.version === versionId || 
+                        if (clientName === versionId ||
+                            meta.version === versionId ||
                             meta.detectedVersion === versionId) {
                             matches = true;
                         }
                     } catch (e) { }
                 }
-                
+
                 // Also try to find version files directly if folder looks like a client
                 if (matches || !fs.existsSync(versionJsonPath)) {
                     const found = findVersionFiles(clientPath);
