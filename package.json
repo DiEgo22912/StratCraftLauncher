@@ -28,7 +28,6 @@
     "build": {
         "appId": "com.tarcraft.launcher",
         "productName": "TARCRAFTLauncher",
-        "icon": "build/icon.png",
         "files": [
             "**/*",
             "!TARCRAFTClient/client-files/**",
@@ -42,7 +41,6 @@
             "target": [
                 "nsis"
             ],
-            "icon": "build/icon.png",
             "artifactName": "TARCRAFTLauncher-setup-${version}.${ext}",
             "publisherName": "yukinch",
             "verifyUpdateCodeSignature": false,
@@ -59,8 +57,6 @@
             "allowToChangeInstallationDirectory": true,
             "createDesktopShortcut": true,
             "createStartMenuShortcut": true,
-            "installerIcon": "build/icon.png",
-            "uninstallerIcon": "build/icon.png",
             "shortcutName": "TARCRAFT Launcher"
         },
         "publish": [
