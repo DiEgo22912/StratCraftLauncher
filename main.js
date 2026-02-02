@@ -1100,6 +1100,34 @@ ipcMain.handle('launcher:getSystemRAM', () => {
     return totalGB;
 });
 
+ipcMain.handle('launcher:checkJava', () => {
+    console.log('[IPC] Checking Java availability...');
+    const javaCmd = resolveJavaCommand();
+    let javaVersion = null;
+    let javaPath = null;
+
+    if (javaCmd) {
+        javaVersion = getJavaMajorVersion(javaCmd);
+        javaPath = javaCmd;
+        console.log('[IPC] System Java found:', javaPath, 'v' + javaVersion);
+    } else {
+        console.log('[IPC] System Java not found, checking bundled Java...');
+        const bundledPath = findBundledJava([path.join(USER_DATA_DIR, 'StratCraftClient')]);
+        if (bundledPath) {
+            javaVersion = getJavaMajorVersion(bundledPath);
+            javaPath = bundledPath;
+            console.log('[IPC] Bundled Java found:', javaPath, 'v' + javaVersion);
+        }
+    }
+
+    return {
+        available: !!javaPath,
+        path: javaPath,
+        version: javaVersion,
+        source: javaCmd ? 'system' : (javaPath ? 'bundled' : 'not-found')
+    };
+});
+
 ipcMain.handle('launcher:selectDirectory', async () => {
     const result = await dialog.showOpenDialog({
         properties: ['openDirectory']
