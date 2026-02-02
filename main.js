@@ -2,7 +2,7 @@ const { app, BrowserWindow, ipcMain, Menu, dialog, Notification } = require('ele
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
-const { spawn, spawnSync } = require('child_process');
+const { spawn, spawnSync, execFile } = require('child_process');
 const net = require('net');
 const os = require('os');
 const { autoUpdater } = require('electron-updater');
@@ -302,34 +302,107 @@ function findBundledJava(rootDirs) {
     return null;
 }
 
-function readServerPort() {
-    try {
-        const raw = fs.readFileSync(SERVER_PROPERTIES, 'utf8');
-        const lines = raw.split(/\r?\n/);
-        for (const line of lines) {
-            if (!line || line.startsWith('#')) continue;
-            const [key, value] = line.split('=');
-            if (key?.trim() === 'server-port') {
-                const port = Number(value?.trim());
-                if (Number.isFinite(port)) return port;
+// Pre-initialize Java detection at startup
+function initializeJavaAtStartup() {
+    console.log('[Startup] Initializing Java detection...');
+    const javaCmd = resolveJavaCommand();
+    if (javaCmd) {
+        console.log('[Startup] ✓ System Java available:', javaCmd);
+    } else {
+        console.warn('[Startup] ⚠ System Java not found, will check bundled Java on game launch');
+    }
+}
+
+// Attempt to launch game with multiple fallback strategies
+function launchGameProcess(javaCmd, args, instanceDir) {
+    return new Promise((resolve, reject) => {
+        if (!javaCmd || typeof javaCmd !== 'string' || javaCmd.length === 0) {
+            reject(new Error(`Invalid Java command: ${JSON.stringify(javaCmd)}`));
+            return;
+        }
+
+        console.log('[Launch] Attempting to launch with Java:', javaCmd);
+        console.log('[Launch] Working directory:', instanceDir);
+        console.log('[Launch] JVM args:', args.slice(0, 3).join(' '), '...');
+
+        try {
+            // Strategy 1: Try spawn with detached mode (preferred)
+            const child = spawn(javaCmd, args, {
+                cwd: instanceDir,
+                detached: true,
+                stdio: 'ignore',
+                windowsHide: true
+            });
+
+            // Handle errors immediately after spawn
+            let errorOccurred = false;
+            const errorHandler = (err) => {
+                if (!errorOccurred) {
+                    errorOccurred = true;
+                    console.error('[Launch] Spawn error:', err.message);
+                    reject(err);
+                }
+            };
+
+            // Listen for immediate errors
+            child.once('error', errorHandler);
+            child.stderr?.once('data', (data) => {
+                if (!errorOccurred) {
+                    const errorMsg = data.toString().slice(0, 200);
+                    console.error('[Launch] Stderr:', errorMsg);
+                }
+            });
+
+            // If no error within 1 second, assume success
+            const successTimeout = setTimeout(() => {
+                child.removeListener('error', errorHandler);
+                child.unref();
+                console.log('[Launch] Game launched successfully, PID:', child.pid);
+                resolve({ pid: child.pid });
+            }, 1000);
+
+            // Also handle close event
+            child.on('close', (code) => {
+                clearTimeout(successTimeout);
+                if (code !== null && code !== 0 && !errorOccurred) {
+                    errorOccurred = true;
+                    console.error('[Launch] Child process exited with code:', code);
+                }
+            });
+
+        } catch (err) {
+            console.error('[Launch] Spawn failed, trying fallback method:', err.message);
+
+            // Strategy 2: Fallback - try with explicit timeout handling
+            try {
+                // Create a batch file wrapper for more reliable execution on Windows
+                if (process.platform === 'win32') {
+                    const batchPath = path.join(instanceDir, 'launch-game.bat');
+                    const batchContent = `@echo off\ncd /d "${instanceDir}"\n"${javaCmd}" ${args.map(a => `"${a}"`).join(' ')}\n`;
+
+                    fs.writeFileSync(batchPath, batchContent);
+                    console.log('[Launch] Created batch file:', batchPath);
+
+                    const child = spawn('cmd', ['/c', batchPath], {
+                        cwd: instanceDir,
+                        detached: true,
+                        stdio: 'ignore',
+                        windowsHide: true
+                    });
+
+                    child.unref();
+                    console.log('[Launch] Game launched via batch file, PID:', child.pid);
+                    resolve({ pid: child.pid });
+                } else {
+                    reject(err);
+                }
+            } catch (fallbackErr) {
+                console.error('[Launch] Fallback method also failed:', fallbackErr.message);
+                reject(fallbackErr);
             }
         }
-    } catch { }
-    return DEFAULT_PORT;
+    });
 }
-
-function writeVarInt(value) {
-    const bytes = [];
-    let val = value >>> 0;
-    do {
-        let temp = val & 0x7f;
-        val >>>= 7;
-        if (val !== 0) temp |= 0x80;
-        bytes.push(temp);
-    } while (val !== 0);
-    return Buffer.from(bytes);
-}
-
 function readVarInt(buffer, offset) {
     let num = 0;
     let shift = 0;
@@ -568,6 +641,10 @@ app.whenReady().then(async () => {
     await migrateOldDataToUserData();
     // Try to migrate any token saved in settings to keytar
     migrateTokenToKeytar().catch(() => { });
+
+    // Initialize Java detection early
+    initializeJavaAtStartup();
+
     Menu.setApplicationMenu(null);
     createWindow();
 
@@ -1030,7 +1107,7 @@ ipcMain.handle('launcher:selectDirectory', async () => {
     return result.filePaths[0] || null;
 });
 
-ipcMain.handle('launcher:launch', (_, payload) => {
+ipcMain.handle('launcher:launch', async (_, payload) => {
     const { versionJsonPath, versionJarPath } = resolveVersionFiles();
     if (!fs.existsSync(versionJsonPath)) {
         return { ok: false, msg: 'Не найден файл версии TARCRAFT 1.0.0.json.' };
@@ -1051,7 +1128,7 @@ ipcMain.handle('launcher:launch', (_, payload) => {
     if (!Number.isFinite(maxRamGb) || maxRamGb < 1) maxRamGb = 6;
     if (maxRamGb > totalRamGb) maxRamGb = Math.max(2, totalRamGb - 1);
     if (minRamGb > maxRamGb) minRamGb = Math.max(1, Math.min(2, maxRamGb));
-    
+
     console.log('[Launch] Resolving Java command...');
     let javaCmd = resolveJavaCommand();
     if (!javaCmd) {
@@ -1124,23 +1201,13 @@ ipcMain.handle('launcher:launch', (_, payload) => {
     console.log('[Launch] Working directory:', INSTANCE_DIR);
 
     try {
-        // Validate javaCmd before spawn
-        if (!javaCmd || typeof javaCmd !== 'string' || javaCmd.length === 0) {
-            throw new Error(`Invalid Java command: ${javaCmd}`);
-        }
-        
-        const child = spawn(javaCmd, args, {
-            cwd: INSTANCE_DIR,
-            detached: true,
-            stdio: 'ignore',
-            windowsHide: true
-        });
-        child.unref();
-        console.log('[Launch] Game started successfully, PID:', child.pid);
+        // Use the new reliable launch function
+        const result = await launchGameProcess(javaCmd, args, INSTANCE_DIR);
+        console.log('[Launch] Success:', result);
         return { ok: true, msg: 'Игра запускается.' };
     } catch (err) {
-        console.error('[Launch] Spawn error:', err.message);
-        return { ok: false, msg: `Ошибка запуска: ${err.message}` };
+        console.error('[Launch] Final error:', err.message, err.stack);
+        return { ok: false, msg: `Ошибка запуска игры: ${err.message}` };
     }
 });
 
