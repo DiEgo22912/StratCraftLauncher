@@ -391,17 +391,48 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
-profileBtn.addEventListener('click', () => {
-    profileDrawer.classList.remove('hidden');
-    requestAnimationFrame(() => profileDrawer.classList.add('show'));
-});
+// Profile drawer with overlay
+const profileOverlay = document.getElementById('profileOverlay');
 
-profileDrawer.addEventListener('click', (e) => {
-    if (e.target === profileDrawer) {
-        profileDrawer.classList.remove('show');
-        setTimeout(() => profileDrawer.classList.add('hidden'), 200);
-    }
-});
+function openProfileDrawer() {
+    profileOverlay.classList.remove('hidden');
+    profileDrawer.classList.remove('hidden');
+    requestAnimationFrame(() => {
+        profileOverlay.classList.add('show');
+        profileDrawer.classList.add('show');
+    });
+}
+
+function closeProfileDrawer() {
+    profileDrawer.classList.remove('show');
+    profileOverlay.classList.remove('show');
+    setTimeout(() => {
+        profileDrawer.classList.add('hidden');
+        profileOverlay.classList.add('hidden');
+    }, 300);
+}
+
+profileBtn.addEventListener('click', openProfileDrawer);
+
+// Close drawer on overlay click
+profileOverlay.addEventListener('click', closeProfileDrawer);
+
+// Close all modals on overlay/background click
+function setupModalClose(modal) {
+    if (!modal) return;
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+            modal.classList.remove('show');
+            setTimeout(() => modal.classList.add('hidden'), 200);
+        }
+    });
+}
+
+// Apply to all modals
+setupModalClose(registerModal);
+setupModalClose(settingsModal);
+setupModalClose(document.getElementById('launcherUpdateModal'));
+
 // --- Auth check helper
 async function checkAuth() {
     const statusEl = document.getElementById('authCheckStatus');
@@ -450,31 +481,17 @@ const authCheckStatus = document.getElementById('authCheckStatus');
 if (checkAuthBtn) checkAuthBtn.addEventListener('click', checkAuth);
 if (logoutBtn) logoutBtn.addEventListener('click', () => {
     // clear saved token and show auth view
-    // delete token (keytar or settings) and update UI
     (async () => {
         try { await window.auth.deleteToken(); } catch (e) { /* ignore */ }
         try { const cur = await window.launcher.getSettings(); await window.launcher.saveSettings({ ...(cur || {}), authToken: null, authStaySignedIn: false }); } catch (e) { /* ignore */ }
     })();
-    profileDrawer.classList.remove('show');
-    setTimeout(() => profileDrawer.classList.add('hidden'), 160);
-    authView.classList.remove('hidden');
-    mainView.classList.add('hidden');
-    profileBtn.classList.add('hidden');
-    setStatus('Выход выполнен.', true);
-});
-logoutBtn.addEventListener('click', () => {
-    profileDrawer.classList.remove('show');
-    setTimeout(() => profileDrawer.classList.add('hidden'), 200);
+    closeProfileDrawer();
     stopServerPolling();
     // persist username on logout if remember checked
     try {
         if (rememberMe.checked && username.value.trim()) localStorage.setItem('launcherUser', username.value.trim());
         else localStorage.removeItem('launcherUser');
     } catch (e) { }
-    (async () => {
-        try { await window.auth.deleteToken(); } catch (e) { }
-        try { const cur = await window.launcher.getSettings(); await window.launcher.saveSettings({ ...(cur || {}), authToken: null, authStaySignedIn: false }); } catch (e) { }
-    })();
     authView.classList.remove('hidden');
     mainView.classList.add('hidden');
     profileBtn.classList.add('hidden');
@@ -484,7 +501,7 @@ logoutBtn.addEventListener('click', () => {
     if (!container.contains(header)) {
         container.insertBefore(header, authView);
     }
-    setStatus('Введите ник и пароль.');
+    setStatus('Выход выполнен.', true);
 });
 
 if (settingsBtn) {

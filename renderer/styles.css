@@ -251,6 +251,29 @@ header.in-main #appTitle.slide-in {
     position: relative;
 }
 
+.logo-icon-img {
+    width: 100px;
+    height: 100px;
+    object-fit: cover;
+    border-radius: 20px;
+    border: 3px solid var(--accent-primary);
+    position: relative;
+    z-index: 2;
+    animation: logo-pulse 3s ease-in-out infinite;
+    box-shadow:
+        0 0 30px var(--glow-red),
+        0 10px 40px rgba(0, 0, 0, 0.5),
+        inset 0 0 20px rgba(201, 48, 44, 0.3);
+    transition: all 0.3s ease;
+}
+
+.logo-icon-img:hover {
+    transform: scale(1.05);
+    box-shadow:
+        0 0 50px var(--glow-red),
+        0 15px 50px rgba(0, 0, 0, 0.6);
+}
+
 .logo-icon {
     font-size: 42px;
     width: 80px;
@@ -272,11 +295,11 @@ header.in-main #appTitle.slide-in {
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    width: 120px;
-    height: 120px;
+    width: 140px;
+    height: 140px;
     background: radial-gradient(circle, var(--glow-red), transparent 70%);
     border-radius: 50%;
-    filter: blur(25px);
+    filter: blur(30px);
     animation: logo-glow-pulse 2s ease-in-out infinite;
     z-index: 1;
 }
@@ -651,6 +674,21 @@ input::placeholder {
     gap: 12px;
 }
 
+.brand-logo {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    object-fit: cover;
+    border: 2px solid var(--accent-primary);
+    box-shadow: 0 0 20px var(--glow-red);
+    transition: all 0.3s ease;
+}
+
+.brand-logo:hover {
+    transform: scale(1.1);
+    box-shadow: 0 0 30px var(--glow-red);
+}
+
 .brand-icon {
     width: 40px;
     height: 40px;
@@ -914,7 +952,7 @@ input::placeholder {
 .profile-avatar {
     position: fixed;
     top: 16px;
-    right: 16px;
+    left: 16px;
     width: 48px;
     height: 48px;
     border-radius: 50%;
@@ -925,12 +963,20 @@ input::placeholder {
     cursor: pointer;
     transition: all 0.3s ease;
     z-index: 100;
+    overflow: hidden;
 }
 
 .profile-avatar:hover {
     border-color: var(--accent-primary);
-    box-shadow: 0 0 20px var(--glow-red);
-    transform: scale(1.05);
+    box-shadow: 0 0 25px var(--glow-red);
+    transform: scale(1.1);
+}
+
+.avatar-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 50%;
 }
 
 .avatar-icon {
@@ -946,29 +992,65 @@ input::placeholder {
     border-radius: 50%;
     background: var(--success);
     border: 2px solid var(--bg-medium);
+    box-shadow: 0 0 8px rgba(40, 167, 69, 0.6);
 }
 
-/* Drawer */
+/* Overlay for modals and drawer */
+.overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px);
+    z-index: 98;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s ease;
+}
+
+.overlay.show {
+    opacity: 1;
+    visibility: visible;
+}
+
+/* Drawer - slides from LEFT */
 .drawer {
     position: fixed;
-    top: 70px;
-    right: 16px;
-    width: 280px;
+    top: 0;
+    left: 0;
+    width: 300px;
+    height: 100vh;
     background: var(--bg-card);
-    border: 1px solid var(--border-accent);
-    border-radius: 12px;
-    padding: 20px;
+    border-right: 1px solid var(--border-accent);
+    padding: 24px;
     backdrop-filter: blur(20px);
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+    box-shadow: 10px 0 40px rgba(0, 0, 0, 0.5);
     z-index: 99;
-    transform: translateX(120%);
+    transform: translateX(-100%);
     opacity: 0;
-    transition: all 0.3s ease;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .drawer.show {
     transform: translateX(0);
     opacity: 1;
+}
+
+.drawer-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border-dark);
+}
+
+.drawer-avatar {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    border: 2px solid var(--accent-primary);
+    object-fit: cover;
+    box-shadow: 0 0 20px var(--glow-red);
 }
 
 .drawer-title {
@@ -977,14 +1059,49 @@ input::placeholder {
     color: var(--accent-primary);
     text-transform: uppercase;
     letter-spacing: 2px;
-    margin-bottom: 8px;
+    margin-bottom: 4px;
 }
 
 .drawer-name {
-    font-size: 18px;
+    font-size: 22px;
     font-weight: 700;
     color: var(--text-primary);
-    margin-bottom: 16px;
+    margin-bottom: 24px;
+}
+
+.drawer-content {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    height: calc(100% - 100px);
+}
+
+.drawer-content .btn {
+    width: 100%;
+    justify-content: center;
+}
+
+.drawer-close {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--bg-dark);
+    border: 1px solid var(--border-dark);
+    color: var(--text-secondary);
+    font-size: 18px;
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+    transition: all 0.2s ease;
+}
+
+.drawer-close:hover {
+    background: var(--accent-primary);
+    color: white;
+    border-color: var(--accent-primary);
 }
 
 /* Modal */
