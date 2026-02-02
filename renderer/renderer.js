@@ -37,7 +37,6 @@ const updateEta = document.getElementById('updateEta');
 const autoCheckUpdatesCheckbox = document.getElementById('autoCheckUpdates');
 const serverDot = document.getElementById('serverDot');
 const playAux = document.getElementById('playAux');
-let checkReleaseBtn = null;
 
 // Track operation state to prevent double-clicks
 let isOperationInProgress = false;
@@ -51,56 +50,9 @@ function setButtonsDisabled(disabled) {
             launchBtn.classList.remove('disabled');
         }
     }
-    if (checkReleaseBtn) {
-        checkReleaseBtn.disabled = disabled;
-        if (disabled) {
-            checkReleaseBtn.classList.add('disabled');
-        } else {
-            checkReleaseBtn.classList.remove('disabled');
-        }
-    }
 }
 
-function showCheckReleaseButton() {
-    if (!playAux) return;
-    if (checkReleaseBtn) return; // already shown
-    checkReleaseBtn = document.createElement('button');
-    checkReleaseBtn.className = 'btn ghost';
-    checkReleaseBtn.textContent = 'Проверить релиз';
-    if (isOperationInProgress) {
-        checkReleaseBtn.disabled = true;
-        checkReleaseBtn.classList.add('disabled');
-    }
-    checkReleaseBtn.addEventListener('click', async () => {
-        if (isOperationInProgress) return;
-        isOperationInProgress = true;
-        setButtonsDisabled(true);
-        setMainStatus('Проверка релиза…', true);
-        try {
-            const res = await window.clientUpdate.check();
-            if (res?.ok && res.manifest) {
-                setMainStatus('Релиз найден. Нажмите Обновить.', true);
-                setLaunchButtonToUpdate(res.manifest);
-            } else if (res?.ok && !res.manifest) {
-                setMainStatus('Релиз не содержит манифеста client-manifest.json.', false);
-            } else {
-                setMainStatus(`Ошибка проверки релиза: ${res?.msg || 'неизвестно'}`, false);
-            }
-        } catch (e) {
-            setMainStatus(`Ошибка проверки релиза: ${e?.message || e}`, false);
-        } finally {
-            isOperationInProgress = false;
-            setButtonsDisabled(false);
-        }
-    });
-    playAux.appendChild(checkReleaseBtn);
-}
-
-function hideCheckReleaseButton() {
-    if (!playAux || !checkReleaseBtn) return;
-    try { playAux.removeChild(checkReleaseBtn); } catch (e) { }
-    checkReleaseBtn = null;
-}
+// Removed showCheckReleaseButton and hideCheckReleaseButton - not needed with simplified update logic
 
 // Launcher update modal elements
 const launcherUpdateModal = document.getElementById('launcherUpdateModal');
@@ -701,53 +653,63 @@ async function setLaunchButtonToUpdate(manifest) {
 async function checkClientUpdateAndApplyUI() {
     setMainStatus('');
     try {
+        // First check if we have any installed clients
         const r = await window.client.installed();
         const installed = (r?.ok !== false) ? r.clients : [];
+
+        // If we have installed clients, just use them - no need to check for updates on every login
+        if (installed && installed.length > 0) {
+            const preferredClient = installed[0];
+            const preferred = preferredClient.name;
+            console.log('[Client Check] Using installed client:', preferred, 'meta:', preferredClient?.meta);
+            setLaunchButtonToLaunch(preferred);
+            setMainStatus('Готово к запуску', true);
+            const remoteEl = document.getElementById('clientRemoteVersion');
+            if (remoteEl) remoteEl.textContent = '—';
+
+            // Silently check for updates in background (don't show errors)
+            try {
+                const res = await window.clientUpdate.check();
+                if (res?.ok && res.manifest) {
+                    const manifest = res.manifest;
+                    // Check if installed version matches manifest.version
+                    const isVersionInstalled = installed.some(client => {
+                        const meta = client.meta || {};
+                        const folderName = client.name;
+                        return folderName === manifest.version ||
+                            meta.version === manifest.version ||
+                            meta.detectedVersion === manifest.version;
+                    });
+
+                    if (!isVersionInstalled) {
+                        // Update available - show it
+                        setLaunchButtonToUpdate(manifest);
+                        if (remoteEl) remoteEl.textContent = manifest.version || '—';
+                        setMainStatus(`Доступна новая версия: ${manifest.version}`, true);
+                    }
+                }
+            } catch (e) {
+                // Ignore network errors if client is already installed
+                console.log('[Client Check] Background update check failed (ignored):', e.message);
+            }
+            return;
+        }
+
+        // No installed clients - need to download
         const res = await window.clientUpdate.check();
         if (res?.ok && res.manifest) {
             const manifest = res.manifest;
-            // Determine if installed version matches manifest.version
-            // Check all possible version fields in installed clients
-            const isVersionInstalled = installed.some(client => {
-                const meta = client.meta || {};
-                const folderName = client.name;
-                // Compare against folder name, version, and detectedVersion
-                return folderName === manifest.version ||
-                    meta.version === manifest.version ||
-                    meta.detectedVersion === manifest.version;
-            });
-
-            if (!isVersionInstalled) {
-                // update available
-                hideCheckReleaseButton();
-                setLaunchButtonToUpdate(manifest);
-                const remoteEl = document.getElementById('clientRemoteVersion');
-                if (remoteEl) remoteEl.textContent = manifest.version || '—';
-                setMainStatus(`Доступна новая версия: ${manifest.version}`, true);
-                return;
-            }
-        } else if (res?.ok === false) {
-            // explicit error from check
-            setMainStatus(`Ошибка получения релиза: ${res.msg || 'неизвестно'}`, false);
-            showCheckReleaseButton();
-            return;
+            setLaunchButtonToUpdate(manifest);
+            const remoteEl = document.getElementById('clientRemoteVersion');
+            if (remoteEl) remoteEl.textContent = manifest.version || '—';
+            setMainStatus(`Необходимо установить клиент: ${manifest.version}`, true);
         } else {
-            // no manifest found
-            setMainStatus('Релиз клиента недоступен и локальная сборка отключена.', false);
-            showCheckReleaseButton();
-            return;
+            // Can't get manifest and no local client
+            setMainStatus('Клиент не установлен. Проверьте подключение к интернету.', false);
+            setLaunchButtonToLaunch(); // Still allow launch attempt
         }
-        // no update - client is up to date
-        // Use folder name (client.name) for launch - this matches the actual directory structure
-        // The detectedVersion is just metadata, but launch needs the actual folder name
-        const preferredClient = (installed && installed.length > 0) ? installed[0] : null;
-        const preferred = preferredClient ? preferredClient.name : undefined;
-        console.log('[Client Check] Using installed client:', preferred, 'meta:', preferredClient?.meta);
-        setLaunchButtonToLaunch(preferred);
-        setMainStatus('Клиент актуален. Готово к запуску.', true);
-        const remoteEl = document.getElementById('clientRemoteVersion');
-        if (remoteEl) remoteEl.textContent = '—';
     } catch (e) {
+        // Critical error
         setMainStatus(`Ошибка проверки: ${e?.message || e}`, false);
         setLaunchButtonToLaunch();
     }
@@ -1044,7 +1006,7 @@ if (checkUpdatesBtn && updateStatus) {
                     };
                     try {
                         // browser notification
-                        new Notification('StratCraftLauncher', { body: 'Обновление загружено. Установите и перезапустите приложение.' });
+                        new Notification('TARCRAFT Launcher', { body: 'Обновление загружено. Установите и перезапустите приложение.' });
                     } catch (e) { }
                     // If modal open - change install button behavior
                     try {
@@ -1055,7 +1017,7 @@ if (checkUpdatesBtn && updateStatus) {
                 case 'error':
                     updateStatus.textContent = `Ошибка: ${payload?.message || 'неизвестная'}`;
                     if (updateProgress) { updateProgress.style.display = 'none'; updateProgress.value = 0; }
-                    try { new Notification('StratCraftLauncher', { body: `Ошибка обновлений: ${payload?.message || 'неизвестная'}` }); } catch (e) { }
+                    try { new Notification('TARCRAFT Launcher', { body: `Ошибка обновлений: ${payload?.message || 'неизвестная'}` }); } catch (e) { }
                     break;
             }
         });

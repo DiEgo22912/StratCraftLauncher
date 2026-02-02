@@ -537,14 +537,14 @@ app.whenReady().then(async () => {
     autoUpdater.on('checking-for-update', () => sendUpdateEvent('checking'));
     autoUpdater.on('update-available', info => {
         sendUpdateEvent('available', info);
-        try { new Notification({ title: 'StratCraftLauncher', body: 'Доступно обновление' }).show(); } catch (e) { }
+        try { new Notification({ title: 'TARCRAFT Launcher', body: 'Доступно обновление' }).show(); } catch (e) { }
     });
     autoUpdater.on('update-not-available', info => sendUpdateEvent('not-available', info));
     autoUpdater.on('error', err => sendUpdateEvent('error', { message: err?.message || String(err) }));
     autoUpdater.on('download-progress', progressObj => sendUpdateEvent('download-progress', progressObj));
     autoUpdater.on('update-downloaded', info => {
         sendUpdateEvent('downloaded', info);
-        try { new Notification({ title: 'StratCraftLauncher', body: 'Обновление загружено — установите и перезапустите' }).show(); } catch (e) { }
+        try { new Notification({ title: 'TARCRAFT Launcher', body: 'Обновление загружено — установите и перезапустите' }).show(); } catch (e) { }
     });
 
     ipcMain.handle('update:check', async () => {
@@ -588,8 +588,8 @@ app.whenReady().then(async () => {
                 const client = (parsedUrl.protocol === 'http:') ? http : https;
                 // For asset downloads (browser_download_url), don't send GitHub API headers
                 const headers = isAssetDownload
-                    ? { 'User-Agent': 'StratCraftLauncher' }
-                    : { 'User-Agent': 'StratCraftLauncher', 'Accept': 'application/vnd.github+json' };
+                    ? { 'User-Agent': 'TARCRAFTLauncher' }
+                    : { 'User-Agent': 'TARCRAFTLauncher', 'Accept': 'application/vnd.github+json' };
                 const opts = {
                     hostname: parsedUrl.hostname,
                     port: parsedUrl.port || (parsedUrl.protocol === 'https:' ? 443 : 80),
@@ -648,7 +648,7 @@ app.whenReady().then(async () => {
             const fs = require('fs');
             const parsed = new URL(url);
             const client = parsed.protocol === 'http:' ? http : https;
-            const req = client.get(url, { headers: { 'User-Agent': 'StratCraftLauncher' } }, (res) => {
+            const req = client.get(url, { headers: { 'User-Agent': 'TARCRAFTLauncher' } }, (res) => {
                 // Handle redirects
                 if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
                     if (redirectsLeft > 0) {
@@ -1014,7 +1014,7 @@ ipcMain.handle('launcher:launch', (_, payload) => {
         try {
             dialog.showMessageBox({
                 type: 'error',
-                title: 'StratCraftLauncher',
+                title: 'TARCRAFT Launcher',
                 message: 'Не удалось запустить клиент',
                 detail: msg
             });
@@ -1050,7 +1050,7 @@ ipcMain.handle('launcher:launch', (_, payload) => {
         classpath: classpath.join(classpathSeparator),
         classpath_separator: classpathSeparator,
         library_directory: path.join(mcDir, 'libraries'),
-        launcher_name: 'StratCraftLauncher',
+        launcher_name: 'TARCRAFTLauncher',
         launcher_version: app.getVersion()
     };
 
@@ -1313,7 +1313,7 @@ ipcMain.handle('client:launch', async (_, payload) => {
         classpath: classpath.join(classpathSeparator),
         classpath_separator: classpathSeparator,
         library_directory: path.join(mcDir, 'libraries'),
-        launcher_name: 'StratCraftLauncher',
+        launcher_name: 'TARCRAFTLauncher',
         launcher_version: app.getVersion()
     };
 
